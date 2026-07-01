@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>404 - Page Not Found | FiberOne</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #0d1526;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+    .container { text-align: center; padding: 40px; }
+    .code { font-size: 120px; font-weight: 700; color: #1a3faa; line-height: 1; margin-bottom: 8px; letter-spacing: -4px; }
+    .title { font-size: 28px; font-weight: 600; margin-bottom: 12px; }
+    .desc { font-size: 15px; color: #94a3b8; margin-bottom: 32px; line-height: 1.6; }
+    .btn {
+      display: inline-block; padding: 12px 32px; background: #1a3faa; color: #fff;
+      text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #0f2d7a; }
+    .icon { font-size: 64px; margin-bottom: 16px; opacity: 0.3; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">&#9888;</div>
+    <div class="code">404</div>
+    <div class="title">Page Not Found</div>
+    <div class="desc">The page you are looking for does not exist or<br>has been moved to a new location.</div>
+    <a href="javascript:history.back()" class="btn">Go Back</a>
+  </div>
+</body>
+</html>

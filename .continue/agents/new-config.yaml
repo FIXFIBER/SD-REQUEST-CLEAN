@@ -1,0 +1,26 @@
+name: My Continue Config
+version: 1.0.0
+schema: v1
+
+models:
+  - name: 9Router Free Combo
+    provider: openai
+    model: free_combo
+    apiBase: http://localhost:20128/v1
+    apiKey: sk-531da0a383731548-mnc777-070022ff
+
+  - name: 9Router Free Combo (Chat)
+    provider: openai
+    model: free_combo
+    apiBase: http://localhost:20128/v1
+    apiKey: sk-531da0a383731548-mnc777-070022ff
+    roles:
+      - chat
+
+  - name: 9Router Free Combo (Autocomplete)
+    provider: openai
+    model: free_combo
+    apiBase: http://localhost:20128/v1
+    apiKey: sk-531da0a383731548-mnc777-070022ff
+    roles:
+      - autocomplete

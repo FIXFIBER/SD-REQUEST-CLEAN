@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <title>Vendor Review - PAT Project</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+</head>
+<body>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f5f6fa;
+      min-height: 100vh;
+      padding: 24px 16px;
+      -webkit-text-size-adjust: 100%;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .header {
+      background: linear-gradient(135deg, #0d1526 0%, #1a3faa 100%);
+      color: #fff;
+      padding: 20px 24px;
+      border-radius: 16px 16px 0 0;
+    }
+    .header h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+    .header p { font-size: 13px; opacity: 0.8; }
+    .body-card {
+      background: #fff;
+      border: 1px solid #e2e4e9;
+      border-top: none;
+      padding: 24px 20px;
+      border-radius: 0 0 16px 16px;
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #1a3faa;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e2e4e9;
+    }
+    .info-grid {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 8px;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+    .info-grid .label { color: #8a90a0; font-weight: 500; }
+    .info-grid .value { color: #0d1526; font-weight: 500; word-break: break-word; }
+    .score-display {
+      text-align: center;
+      padding: 20px;
+      background: #f8fafc;
+      border-radius: 12px;
+      border: 1px solid #e2e4e9;
+      margin-bottom: 20px;
+    }
+    .score-num { font-size: 40px; font-weight: 700; color: #0d1526; }
+    .score-label { font-size: 13px; color: #8a90a0; margin-top: 4px; }
+    .action-section {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid #e2e4e9;
+      text-align: center;
+    }
+    .action-section h3 { font-size: 16px; color: #0d1526; margin-bottom: 12px; }
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .action-buttons button {
+      flex: 1;
+      min-width: 120px;
+      max-width: 220px;
+    }
+    .btn-approve {
+      padding: 14px 20px;
+      background: #166534;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity 0.2s;
+    }
+    .btn-approve:hover { opacity: 0.9; }
+    .btn-approve:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-reject {
+      padding: 14px 20px;
+      background: #dc2626;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity 0.2s;
+    }
+    .btn-reject:hover { opacity: 0.9; }
+    .btn-reject:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-pdf {
+      padding: 14px 20px;
+      background: #1a3faa;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity 0.2s;
+    }
+    .btn-pdf:hover { opacity: 0.9; }
+    textarea {
+      width: 100%;
+      max-width: 500px;
+      min-height: 80px;
+      padding: 12px;
+      border: 1px solid #e2e4e9;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 14px;
+      resize: vertical;
+      margin-bottom: 16px;
+    }
+    .message {
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .message.success { display: block; background: #dcfce7; color: #166534; border-left: 4px solid #22c55e; }
+    .message.error { display: block; background: #fef2f2; color: #991b1b; border-left: 4px solid #ef4444; }
+    .message.info { display: block; background: #e6f1fb; color: #1a3faa; border-left: 4px solid #1a3faa; }
+    .loading { text-align: center; padding: 40px; color: #8a90a0; font-size: 14px; }
+    .checklist-summary {
+      display: flex; gap: 12px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .check-stat {
+      padding: 12px 20px; background: #fff; border-radius: 8px;
+      border: 1px solid #e2e4e9; text-align: center; min-width: 80px;
+    }
+    .check-stat .num { font-size: 20px; font-weight: 700; }
+    .check-stat .lbl { font-size: 11px; color: #8a90a0; }
+    .table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin-bottom: 20px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 420px; }
+    th { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e2e4e9; font-size: 11px; text-transform: uppercase; color: #8a90a0; font-weight: 600; white-space: nowrap; }
+    td { padding: 8px 10px; border-bottom: 0.5px solid #f0f1f5; }
+    .images-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
+    .images-grid img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 8px; border: 1px solid #e2e4e9; cursor: zoom-in; }
+    @media (max-width: 600px) {
+      body { padding: 12px 8px; }
+      .header { padding: 16px; }
+      .header h1 { font-size: 17px; }
+      .header p { font-size: 12px; }
+      .body-card { padding: 16px 12px; }
+      .info-grid { grid-template-columns: 1fr; gap: 2px; }
+      .info-grid .label { font-size: 12px; }
+      .info-grid .value { font-size: 14px; padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px dashed #f0f1f5; }
+      .score-num { font-size: 32px; }
+      .action-buttons { flex-direction: column; align-items: stretch; }
+      .action-buttons button { max-width: none; min-width: 0; }
+      .btn-approve, .btn-reject, .btn-pdf { padding: 12px 16px; font-size: 14px; }
+      textarea { max-width: 100%; }
+      .check-stat { min-width: 70px; padding: 10px 14px; }
+      .images-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+    }
+    @media (max-width: 380px) {
+      .header h1 { font-size: 15px; }
+      .body-card { padding: 12px 8px; }
+      .check-stat { min-width: 60px; padding: 8px 10px; }
+      .check-stat .num { font-size: 17px; }
+    }
+    /* BOQ Filter Buttons */
+    .boq-filter-bar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .boq-filter-btn {
+      padding: 5px 14px;
+      border-radius: 20px;
+      border: 1px solid #d1d5db;
+      background: #fff;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .boq-filter-btn:hover { border-color: #1a3faa; color: #1a3faa; }
+    .boq-filter-btn.active { background: #1a3faa; color: #fff; border-color: #1a3faa; }
+    .boq-filter-btn .badge { margin-left: 4px; font-size: 10px; opacity: 0.7; }
+    .boq-filter-btn.active .badge { opacity: 0.9; }
+  </style>
+
+  <div class="container">
+    <div class="header">
+      <h1>PAT Project Review</h1>
+      <p>Provisional Acceptability Test — Vendor Review Portal</p>
+    </div>
+    <div class="body-card" id="main-content">
+      <div class="loading" id="loading-state">
+        <i class="ti ti-refresh" style="font-size: 32px; display: block; margin-bottom: 12px; animation: spin 1s linear infinite;"></i>
+        Loading project details...
+      </div>
+      <div id="project-content" style="display:none"></div>
+    </div>
+  </div>
+
+  <style>
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  </style>
+
+  <script>
+    var g_projectData = null;
+    var g_reviewCompleted = false;
+
+    var PAT_CHK1 = [
+      { cat: "FIBRE DUCT & CIVIL WORKS" },
+      { sev: "MJ", item: "Hand Holes (HH) and Manhole (MH) blinded, cover flush" },
+      { sev: "CR", item: "Closure inside HH properly sealed against water ingress" },
+      { sev: "CR", item: "Standard trench depth 1m – 1.2m" },
+      { sev: "CR", item: "High-density polyethylene (HDPE) duct used" },
+      { sev: "MJ", item: "Spare HDPE duct sealed with duct cap" },
+      { sev: "CR", item: "Duct protected by concrete cast where depth < 0.7m" },
+      { sev: "MJ", item: "MH Trenching width: 50mm between ducts, 100mm duct to edge" },
+      { sev: "MJ", item: "MH/HH placed on normal soil, not more than 7cm–10cm above surface" },
+      { sev: "CR", item: "Steel duct (GI pipe) on all road crossings (Manual Trenching)" },
+      { sev: "CR", item: "Steel duct across/inside canals – MUST be casted" },
+      { sev: "MN", item: "MH/HH walls smoothened & without cracks" },
+      { sev: "MJ", item: "Reinforced concrete/Foundry covers used as per design" },
+      { sev: "MJ", item: "FOB branded warning tapes installed before backfill" },
+      { sev: "MJ", item: "Warning Tape at 0.7m from top surface of trench" },
+      { sev: "MJ", item: "Ducts in drainage properly clipped (1m intervals)" },
+      { sev: "CR", item: "FIBERONE description on MH/HH concrete cover" },
+      { sev: "CR", item: "All aesthetic re-instatement done to property owner's standard" },
+      { sev: "CR", item: "Material spares and construction debris removed from site" },
+      { cat: "POLE INSTALLATION" },
+      { sev: "CR", item: "Pole structurally okay" },
+      { sev: "CR", item: "Pole not tilted, bent or loose" },
+      { sev: "CR", item: "Pole depth: 0.7m–1m for 8m pole; 1m–1.2m for 11m pole" },
+      { sev: "CR", item: "Pole base properly casted to specification" },
+      { sev: "CR", item: "50mm PVC Pipe installed with pole for cable management" },
+      { sev: "CR", item: "Standard pole type as per specification installed" },
+    ];
+
+    var PAT_CHK2 = [
+      { cat: "CABINET, ODF, OFC INSTALLATION" },
+      { sev: "MJ", item: "Equipment rack properly installed and bolted" },
+      { sev: "CR", item: "Equipment rack properly grounded" },
+      { sev: "CR", item: "Patch panel (ODF) properly installed" },
+      { sev: "MJ", item: "Cabinet Plinth as per specification" },
+      { sev: "MJ", item: "Cabinet properly installed and bolted" },
+      { sev: "MJ", item: "Rack Labelling and spacing properly done" },
+      { sev: "MJ", item: "Steel protection cage installed around ODF" },
+      { sev: "MJ", item: "OFC route in order and properly terminated in ODF and cabinet" },
+      { sev: "MJ", item: "OFC covered in flexible pipe inside cabinet" },
+      { sev: "CR", item: "Labelling of Patch panel and OFC properly done" },
+      { sev: "MJ", item: "All entry of Duct properly sealed" },
+      { cat: "AERIAL CABLE & SPLITTER BOX / PCC" },
+      { sev: "MJ", item: "Aerial cable properly routed" },
+      { sev: "CR", item: "Aerial cable on assigned and dedicated pole" },
+      { sev: "MJ", item: "Cable tensioning done; no cable sagging between poles" },
+      { sev: "CR", item: "Tensioning clamp properly installed for aerial" },
+      { sev: "MJ", item: "Cable string installed properly for aerial" },
+      { sev: "CR", item: "Aluminum hooks installed properly for aerial" },
+      { sev: "MJ", item: "40mm HDPE pipe installed with pole for cable uprise" },
+      { sev: "CR", item: "Splitter Box / PCC properly installed above 3.5m (11ft)" },
+      { sev: "CR", item: "Splitter Box / PCC properly hanged in HH" },
+      { sev: "CR", item: "Splitter box / PCC firmly secured with aluminum belt on pole" },
+      { sev: "CR", item: "Standard type and size of splitter box / PCC used as per design" },
+      { sev: "MJ", item: "Splitter box / PCC properly closing" },
+      { sev: "MJ", item: "Cables pulled to appropriate Splitter Cabinet and fastened" },
+      { cat: "CUSTOMER END CABLING & GIS" },
+      { sev: "MJ", item: "Customer end internal cabling properly / neatly trunked" },
+      { sev: "MJ", item: "Customer end external cabling properly and neatly pinned / trunked" },
+      { sev: "CR", item: "Slacks not exceeding 4m for customer internal cabling" },
+      { sev: "CR", item: "Good geo tag video of internal / external cabling provided" },
+      { sev: "CR", item: "GIS Information properly and correctly captured" },
+      { sev: "CR", item: "Core properly arranged and labelled in splitter box" },
+      { sev: "MJ", item: "Labelling of Splitter box / PCC properly done" },
+      { sev: "MJ", item: "Slacks not exceeding 4m at SB, at the cabinet etc." },
+      { cat: "OPTICAL TESTING (OTDR / OPM)" },
+      { sev: "CR", item: "Splicing Loss within tolerance < 0.01 dB" },
+      { sev: "CR", item: "OPM Test done for cables from 1m – 999m" },
+      { sev: "CR", item: "OTDR Trace done for cables from 1000m and above" },
+      { sev: "CR", item: "OTDR trace performed bi-directionally on every fiber strand" },
+      { sev: "CR", item: "End-to-end insertion loss within optical budget (FTTH/FTTB ≤ 28 dB)" },
+      { sev: "CR", item: "Maximum splice event loss ≤ 0.10 dB (access) | ≤ 0.08 dB (backbone)" },
+      { sev: "CR", item: "Maximum connector event loss ≤ 0.50 dB (access) | ≤ 0.30 dB (backbone)" },
+      { sev: "CR", item: "Optical Return Loss (ORL) ≥ 32 dB (access) | ≥ 40 dB (backbone)" },
+      { sev: "CR", item: "1550nm Wavelength Frequency used for OTDR Trace" },
+      { sev: "CR", item: "10ns to 50ns Width pulse used for OTDR Trace" },
+      { sev: "CR", item: "≤ 0.22 dB/km Maximum Attenuation / Loss on Cable" },
+      { sev: "CR", item: "Maximum loss on UPC / APC Connectors (0.35 dB – < 0.5 dB)" },
+      { sev: "CR", item: "Expected Back Reflection on UPC Connectors ≤ –45 dB" },
+      { sev: "CR", item: "Expected Back Reflection on APC Connectors ≤ –60 dB" },
+    ];
+
+    function _sevStyle(s) {
+      if (s === "CR") return "background:#fee2e2;color:#991b1b";
+      if (s === "MJ") return "background:#fef9c3;color:#854d0e";
+      return "background:#dbeafe;color:#1e40af";
+    }
+
+    var token = <?!= JSON.stringify(tokenFromServer) ?> || 
+                new URLSearchParams(window.location.search).get('token');
+    var scriptUrl = "<?= scriptUrl ?>" || (window.location.origin + window.location.pathname);
+
+    if (!token) {
+      document.getElementById('loading-state').innerHTML = '<div style="color:#dc2626;font-weight:600">Invalid review link. No token provided.</div>';
+    } else {
+      loadProject();
+    }
+
+    function gasCallVendor(fnName, args, onSuccess, onError) {
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(onSuccess)
+          .withFailureHandler(onError || function(err) { showMessage(err.message || 'Request failed.', 'error'); })
+          [fnName](...args);
+        return;
+      }
+
+      var SCRIPT_URL = (typeof scriptUrl !== 'undefined' && String(scriptUrl).indexOf('http') === 0)
+        ? scriptUrl : '';
+      var WEB_APP_URL = SCRIPT_URL || (window.location.origin + window.location.pathname.replace(/\/[^/]*\.html$/, ''));
+
+      fetch(WEB_APP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: fnName, args: args })
+      })
+      .then(function(r) { return r.json(); })
+      .then(onSuccess)
+      .catch(function(e) {
+        if (onError) onError(e);
+        else showMessage('Request failed: ' + e.message, 'error');
+      });
+    }
+
+    function loadProject() {
+      gasCallVendor('getVendorPATByToken', [token], function(res) {
+        if (res.success) {
+          g_projectData = res.project;
+          g_reviewCompleted = res.reviewCompleted === true;
+          renderProject(g_projectData);
+        } else {
+          document.getElementById('loading-state').innerHTML =
+            '<div style="color:#dc2626;font-weight:600">' + (res.message || 'Unable to load project.') + '</div>';
+        }
+      }, function(err) {
+        document.getElementById('loading-state').innerHTML =
+          '<div style="color:#dc2626;font-weight:600">Error loading project: ' + err.message + '</div>';
+      });
+    }
+
+    function renderProject(p) {
+      document.getElementById('loading-state').style.display = 'none';
+      var content = document.getElementById('project-content');
+      content.style.display = 'block';
+
+      var score = parseInt(p.snagScore) || 0;
+      var scoreColor = score >= 3 ? '#dc2626' : score === 0 ? '#166534' : '#f59e0b';
+
+      // Checklist counts
+      var checklist = p.checklist || {};
+      var checkValues = Object.values(checklist);
+      var okCount = checkValues.filter(function(v) { return v === 'ok'; }).length;
+      var nokCount = checkValues.filter(function(v) { return v === 'nok'; }).length;
+      var naCount = checkValues.filter(function(v) { return v === 'na'; }).length;
+
+      // Build HTML
+      var html = '';
+
+      // Info
+      html += '<div class="section-title">Site Information</div>';
+      html += '<div class="info-grid">';
+      html += '<div class="label">Project ID:</div><div class="value">' + (p.projectId || '—') + '</div>';
+      html += '<div class="label">Project Name:</div><div class="value">' + (p.projectName || '—') + '</div>';
+      html += '<div class="label">Site Address:</div><div class="value">' + (p.siteAddress || '—') + '</div>';
+      html += '<div class="label">Phase:</div><div class="value">' + (p.phase || '—') + '</div>';
+      html += '<div class="label">Work Description:</div><div class="value">' + (p.workDescription || '—') + '</div>';
+      html += '<div class="label">Vendor:</div><div class="value">' + (p.vendor || '—') + '</div>';
+      html += '<div class="label">Inspection Date:</div><div class="value">' + (p.inspectionDate ? new Date(p.inspectionDate).toLocaleDateString('en-GB') : '—') + '</div>';
+      html += '<div class="label">Review Team:</div><div class="value">' + (p.orchestrator || '—') + '</div>';
+      html += '<div class="label">Presiding Officer:</div><div class="value">' + (p.presidingOfficer || '—') + '</div>';
+      html += '</div>';
+
+      // Score
+      html += '<div class="score-display">';
+      html += '<div class="score-num" style="color:' + scoreColor + '">' + score + '</div>';
+      html += '<div class="score-label">Complaint Score</div>';
+      html += '</div>';
+
+      // Checklist summary
+      html += '<div class="section-title">Checklist Summary</div>';
+      html += '<div class="checklist-summary">';
+      html += '<div class="check-stat"><div class="num" style="color:#166534">' + okCount + '</div><div class="lbl">OK</div></div>';
+      html += '<div class="check-stat"><div class="num" style="color:#dc2626">' + nokCount + '</div><div class="lbl">NOK</div></div>';
+      html += '<div class="check-stat"><div class="num" style="color:#854d0e">' + naCount + '</div><div class="lbl">NA</div></div>';
+      html += '</div>';
+
+      html += '<div class="section-title">Materials BOQ</div>';
+      var boq = p.boq || [];
+      if (boq.length === 0) {
+        html += '<div class="table-wrap"><table><thead><tr><th style="width:30px">S/N</th><th>Description</th><th style="width:50px">Scope</th><th style="width:60px">Installed</th><th style="width:50px">Var</th><th>Remark</th></tr></thead><tbody>';
+        html += '<tr><td colspan="6" style="text-align:center;padding:12px;color:#8a90a0">No materials data available.</td></tr>';
+        html += '</tbody></table></div>';
+      } else {
+        var counts = { all: boq.length, insufficient: 0, remaining: 0, equal: 0 };
+        boq.forEach(function(item) {
+          var remark = (item.remark || '').toLowerCase();
+          if (remark.indexOf('insufficient') >= 0) counts.insufficient++;
+          else if (remark.indexOf('remain') >= 0) counts.remaining++;
+          else if (!remark || remark === '-' || remark === '—' || remark === '0') counts.equal++;
+          else counts.remaining++; // treat any other remark as unfiltered
+        });
+        html += '<div class="boq-filter-bar" id="boqFilterBar">';
+        html += '<button class="boq-filter-btn active" data-filter="all" onclick="filterBOQ(this,\'all\')">All <span class="badge">' + counts.all + '</span></button>';
+        html += '<button class="boq-filter-btn" data-filter="insufficient" onclick="filterBOQ(this,\'insufficient\')">Insufficient <span class="badge">' + counts.insufficient + '</span></button>';
+        html += '<button class="boq-filter-btn" data-filter="remaining" onclick="filterBOQ(this,\'remaining\')">Remaining <span class="badge">' + counts.remaining + '</span></button>';
+        html += '<button class="boq-filter-btn" data-filter="equal" onclick="filterBOQ(this,\'equal\')">Equal <span class="badge">' + counts.equal + '</span></button>';
+        html += '</div>';
+        html += '<div class="table-wrap"><table id="boqTable"><thead><tr><th style="width:30px">S/N</th><th>Description</th><th style="width:50px">Scope</th><th style="width:60px">Installed</th><th style="width:50px">Var</th><th>Remark</th></tr></thead><tbody>';
+        boq.forEach(function(item, i) {
+          var desc = item.desc || '';
+          var scope = item.scope || '';
+          var installed = item.installed || '';
+          var variance = item.variance || '';
+          if (!variance && scope !== '' && installed !== '') {
+            variance = Number(scope) - Number(installed);
+          }
+          var remark = item.remark || '';
+          var remarkLower = remark.toLowerCase();
+          var filterType = 'equal';
+          if (remarkLower.indexOf('insufficient') >= 0) filterType = 'insufficient';
+          else if (remarkLower.indexOf('remain') >= 0) filterType = 'remaining';
+          html += '<tr data-boq-type="' + filterType + '">' +
+            '<td style="text-align:center;font-weight:600;color:#0d1526">' + (i + 1) + '</td>' +
+            '<td style="font-weight:500;color:#0d1526">' + desc + '</td>' +
+            '<td style="text-align:center">' + scope + '</td>' +
+            '<td style="text-align:center">' + installed + '</td>' +
+            '<td style="text-align:center;font-weight:600;color:' + (Number(variance) < 0 ? '#dc2626' : '#166534') + '">' + variance + '</td>' +
+            '<td style="font-size:11px;color:#64748b">' + remark + '</td>' +
+          '</tr>';
+        });
+      }
+      html += '</tbody></table></div>';
+
+      // Images
+      var images = p.images || [];
+      if (images.length > 0) {
+        html += '<div class="section-title">Site Images</div>';
+        html += '<div class="images-grid">';
+        images.forEach(function(img) {
+          if (img && img.length > 20) {
+            html += '<img src="' + img + '" loading="lazy" onclick="window.open(this.src, \'_blank\')" onerror="this.style.display=\'none\'">';
+          }
+        });
+        html += '</div>';
+      }
+
+      // Action Section
+      html += '<div class="action-section">';
+      if (g_reviewCompleted) {
+        html += '<div id="message-area"><div class="message info">Your review has already been submitted. Thank you!</div></div>';
+        html += '<div class="action-buttons">';
+        html += '<button class="btn-pdf" id="pdf-btn" onclick="viewVendorPDF()"><i class="ti ti-file-type-pdf"></i> View PDF</button>';
+        html += '</div>';
+      } else {
+        html += '<h3>Submit Your Decision</h3>';
+        html += '<div id="message-area"></div>';
+        html += '<div style="margin-bottom:12px">';
+        html += '<textarea id="vendor-comments" placeholder="Enter your comments (required if rejecting)..."></textarea>';
+        html += '<div id="vendor-comment-error" style="color:#dc2626;font-size:12px;font-weight:600;margin-bottom:8px;display:none">Comment is required when rejecting.</div>';
+        html += '</div>';
+        html += '<div class="action-buttons">';
+        html += '<button class="btn-pdf" id="pdf-btn" onclick="viewVendorPDF()"><i class="ti ti-file-type-pdf"></i> View PDF</button>';
+        html += '<button class="btn-approve" id="approve-btn" onclick="submitDecision(\'approved\')"><i class="ti ti-check"></i> Approve</button>';
+        html += '<button class="btn-reject" id="reject-btn" onclick="submitDecision(\'rejected\')"><i class="ti ti-x"></i> Reject</button>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      content.innerHTML = html;
+    }
+
+    function showMessage(msg, type) {
+      var area = document.getElementById('message-area');
+      if (!area) return;
+      area.innerHTML = '<div class="message ' + type + '">' + msg + '</div>';
+    }
+
+    function submitDecision(decision) {
+      var comments = document.getElementById('vendor-comments') ? document.getElementById('vendor-comments').value.trim() : '';
+      var errEl = document.getElementById('vendor-comment-error');
+      if (decision === 'rejected' && !comments) {
+        if (errEl) errEl.style.display = 'block';
+        document.getElementById('vendor-comments').style.borderColor = '#dc2626';
+        return;
+      }
+      if (errEl) errEl.style.display = 'none';
+      document.getElementById('vendor-comments').style.borderColor = '';
+      document.getElementById('approve-btn').disabled = true;
+      document.getElementById('reject-btn').disabled = true;
+      document.getElementById('pdf-btn').disabled = true;
+      document.getElementById('approve-btn').innerHTML = '<i class="ti ti-loader"></i> Processing...';
+      document.getElementById('reject-btn').innerHTML = '<i class="ti ti-loader"></i> Processing...';
+
+      gasCallVendor('submitVendorDecision', [token, decision, comments], function(res) {
+        if (res.success) {
+          showMessage('Your review has been submitted successfully. Thank you!', 'success');
+          document.getElementById('approve-btn').style.display = 'none';
+          document.getElementById('reject-btn').style.display = 'none';
+          document.getElementById('vendor-comments').disabled = true;
+        } else {
+          showMessage(res.message || 'Failed to submit your decision.', 'error');
+          document.getElementById('approve-btn').disabled = false;
+          document.getElementById('reject-btn').disabled = false;
+          document.getElementById('pdf-btn').disabled = false;
+          document.getElementById('approve-btn').innerHTML = '<i class="ti ti-check"></i> Approve';
+          document.getElementById('reject-btn').innerHTML = '<i class="ti ti-x"></i> Reject';
+        }
+      }, function(err) {
+        showMessage('Error: ' + err.message, 'error');
+        document.getElementById('approve-btn').disabled = false;
+        document.getElementById('reject-btn').disabled = false;
+        document.getElementById('pdf-btn').disabled = false;
+        document.getElementById('approve-btn').innerHTML = '<i class="ti ti-check"></i> Approve';
+        document.getElementById('reject-btn').innerHTML = '<i class="ti ti-x"></i> Reject';
+      });
+    }
+
+    function viewVendorPDF() {
+      var p = g_projectData;
+      if (!p) return;
+
+      var w = window.open('', '_blank');
+      if (!w || w.closed || typeof w.document === 'undefined') {
+        showMessage('Popup blocked. Please allow popups for this site to view PDFs.', 'error');
+        return;
+      }
+
+      // Render printable view
+      function render() {
+        var score = parseInt(p.snagScore) || 0;
+        var scoreColor = score >= 3 ? '#dc2626' : score === 0 ? '#166534' : '#f59e0b';
+
+        // Checklist counts
+        var checklist = p.checklist || {};
+        var checkValues = Object.values(checklist);
+        var okCount = checkValues.filter(function(v) { return v === 'ok'; }).length;
+        var nokCount = checkValues.filter(function(v) { return v === 'nok'; }).length;
+        var naCount = checkValues.filter(function(v) { return v === 'na'; }).length;
+
+        var chkRows = '';
+        var allItems = PAT_CHK1.concat(PAT_CHK2);
+        var idx = 0;
+        allItems.forEach(function(row) {
+          if (row.cat) {
+            chkRows += '<tr><td colspan="7" style="background:#e8ecf5;font-weight:700;font-size:10px;padding:5px 8px;border:1px solid #000;color:#0d1526">--- ' + row.cat + '</td></tr>';
+          } else {
+            var rawVal = checklist[String(idx)] || checklist['pmchk' + idx] || '';
+            var val = String(rawVal).toLowerCase();
+            var okText = val === 'ok' ? 'OK' : '';
+            var nokText = val === 'nok' ? 'NOK' : '';
+            var naText = val === 'na' ? 'NA' : '';
+            chkRows += '<tr>' +
+              '<td style="border:1px solid #000;text-align:center;font-size:9px">' + row.sev + '</td>' +
+              '<td style="border:1px solid #000;padding:4px 6px;font-size:10px">#' + (idx + 1) + ' ' + row.item + '</td>' +
+              '<td style="border:1px solid #000;text-align:center;font-size:11px;font-weight:700">' + okText + '</td>' +
+              '<td style="border:1px solid #000;text-align:center;font-size:11px;font-weight:700">' + nokText + '</td>' +
+              '<td style="border:1px solid #000;text-align:center;font-size:11px;font-weight:700">' + naText + '</td>' +
+              '<td style="border:1px solid #000"></td>' +
+              '<td style="border:1px solid #000"></td>' +
+            '</tr>';
+            idx++;
+          }
+        });
+        if (idx === 0) {
+          chkRows = '<tr><td colspan="7" style="border:1px solid #000;text-align:center;padding:8px;color:#666">No checklist items</td></tr>';
+        }
+
+        var images = p.images || [];
+        var imgHtml = '';
+        if (images.length > 0) {
+          imgHtml = '<div style="margin-top:8px"><h3 style="font-size:12px;margin-bottom:4px">Site Images</h3><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">';
+          images.forEach(function(img) {
+            if (img && img.length > 20) {
+              imgHtml += '<div style="border:1px solid #ccc;padding:2px"><img src="' + img + '" style="width:100%;max-height:120px;object-fit:contain"></div>';
+            }
+          });
+          imgHtml += '</div></div>';
+        }
+
+        w.document.write('<!DOCTYPE html><html><head><title>PAT Report - ' + p.projectName + '</title><style>@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none}}*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;font-size:12px;padding:20px;color:#000}table{width:100%;border-collapse:collapse;margin-bottom:10px}th,td{border:1px solid #000;padding:4px 6px;text-align:left;font-size:10px}th{background:#0d1526;color:#fff;font-weight:600;text-transform:uppercase}.header{text-align:center;border:1px solid #000;padding:10px;margin-bottom:10px}.header h1{font-size:16px;font-weight:700;text-transform:uppercase}.site-info td:first-child{font-weight:600;width:100px;background:#f5f5f5;font-size:10px}.score-box{text-align:center;padding:12px;border:1px solid #000;margin-bottom:10px}</style></head><body><div class="no-print" style="text-align:center;margin-bottom:10px"><button onclick="window.print()" style="background:#1a3faa;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin:0 4px"> Print / Save PDF</button><button onclick="window.close()" style="background:#666;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:13px;margin:0 4px">Close</button></div><div class="header"><img src="https://fob.ng/wp-content/uploads/2025/08/fiberone-logo1.png" style="height:40px" alt="FiberOne Logo"><h1>PROVISIONAL ACCEPTABILITY TEST DOCUMENT</h1></div><table class="site-info"><tr><td>Project ID:</td><td>' + (p.projectId || '—') + '</td><td>Date:</td><td>' + (p.inspectionDate || '—') + '</td></tr><tr><td>Site Address:</td><td colspan="3">' + (p.siteAddress || p.projectName || '—') + '</td></tr><tr><td>Vendor:</td><td>' + (p.vendor || '—') + '</td><td>Orchestrator:</td><td>' + (p.orchestrator || '—') + '</td></tr><tr><td>Work Description:</td><td colspan="3">' + (p.workDescription || '—') + '</td></tr></table><div class="score-box"><span style="font-size:14px;font-weight:700;color:' + scoreColor + '">Complaint Score: ' + score + '</span></div><h3 style="font-size:12px;margin-bottom:4px;margin-top:8px">Checklist Summary: OK=' + okCount + ' NOK=' + nokCount + ' NA=' + naCount + '</h3><table><thead><tr><th style="text-align:center">Sev</th><th>Work Item / Check</th><th style="text-align:center">OK</th><th style="text-align:center">NOK</th><th style="text-align:center">NA</th><th>Comments</th><th>Remark</th></tr></thead><tbody>' + chkRows + '</tbody></table>' + imgHtml + '<div style="margin-top:20px;padding-top:10px;border-top:2px solid #000;text-align:center;font-size:10px;color:#666">FIBERONE BROADBAND — PAT Vendor Review Document<br>Generated on ' + new Date().toLocaleDateString('en-GB', {day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}) + '</div></body></html>');
+        w.document.close();
+      }
+
+      w.document.write('<html><head><title>Loading PDF...</title></head><body style="font-family:Arial;text-align:center;padding:50px">Loading PDF...</body></html>');
+      render();
+    }
+
+    /* BOQ filter function */
+    function filterBOQ(btn, type) {
+      // Toggle active class
+      var bar = document.getElementById('boqFilterBar');
+      if (!bar) return;
+      bar.querySelectorAll('.boq-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      // Show/hide rows
+      var rows = document.querySelectorAll('#boqTable tbody tr[data-boq-type]');
+      rows.forEach(function(row) {
+        var rowType = row.getAttribute('data-boq-type');
+        row.style.display = (type === 'all' || rowType === type) ? '' : 'none';
+      });
+    }
+  </script>
+</body>
+</html>
