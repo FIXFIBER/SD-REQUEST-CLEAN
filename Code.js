@@ -2011,8 +2011,96 @@ function _patCols() {
     SUBMITTED_AT: 27, ASSIGNED_TO_NAME: 28, ASSIGNED_TO_EMAIL: 29,
     ASSIGNED_TO_DEPT: 30, REJECTION_REASON: 31, WORKFLOW_HISTORY: 32,
     DEPARTMENT: 33, UPDATED_AT: 34, VENDOR_EVER_APPROVED: 35,
-    PRESIDING_OFFICER: 36
+    PRESIDING_OFFICER: 36, EDIT_LOG: 37
   };
+}
+
+/**
+ * Ensures the SD_PAT_PROJECTS sheet has the EDIT_LOG column (col 37).
+ * Safe to call repeatedly — only appends a header cell if missing.
+ * Older rows simply have an empty EDIT_LOG and are treated as [].
+ */
+function _ensurePATEditLogColumn() {
+  try {
+    var sh = _patSheet();
+    if (!sh) return;
+    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+    if (headers.length <= 37) {
+      // Pad header row out to 38 columns (index 37 = EDIT_LOG)
+      for (var i = headers.length; i < 38; i++) headers.push('');
+      headers[37] = 'EditLog';
+      sh.getRange(1, 1, 1, 38).setValues([headers]);
+    }
+  } catch (e) {
+    console.warn('_ensurePATEditLogColumn: ' + e.message);
+  }
+}
+
+/**
+ * Builds a single audit entry describing what changed in a PAT save.
+ * Called for EVERY editor (MEC, every department, Super Admin) so no
+ * edit is ever silent. Returns an entry object or null if nothing changed.
+ * @param {Object} sess - session { name, email, department }
+ * @param {Object} prev - the project as it was in the DB before this save
+ * @param {Object} next - the data being saved
+ */
+function _buildEditLogEntry(sess, prev, next) {
+  sess = sess || {};
+  prev = prev || {};
+  next = next || {};
+  var changed = [];
+  var TRACKED = [
+    'projectName', 'siteAddress', 'lat', 'lon', 'phase', 'workDescription',
+    'vendor', 'inspectionDate', 'orchestrator', 'presidingOfficer',
+    'verdict', 'workflowStatus', 'assignedToDept', 'rejectionReason', 'department'
+  ];
+  TRACKED.forEach(function (f) {
+    var a = prev[f] == null ? '' : String(prev[f]);
+    var b = next[f] == null ? '' : String(next[f]);
+    if (a !== b) changed.push(f);
+  });
+
+  // Collection fields (arrays/objects) — detect add/remove by length delta
+  ['checklist', 'boq', 'snags', 'images'].forEach(function (f) {
+    var pa = (prev[f] && prev[f].length) || 0;
+    var pb = (next[f] && next[f].length) || 0;
+    if (pa !== pb) changed.push(f + ' (' + pa + '\u2192' + pb + ')');
+  });
+
+  var statusBefore = String(prev.workflowStatus || 'Draft');
+  var statusAfter = String(next.workflowStatus || prev.workflowStatus || 'Draft');
+
+  return {
+    at: new Date().toISOString(),
+    by: sess.name || sess.email || 'Unknown',
+    email: sess.email || '',
+    dept: sess.department || (prev.assignedToDept || ''),
+    role: sess.role || '',
+    action: 'edit',
+    changed: changed,
+    statusBefore: statusBefore,
+    statusAfter: statusAfter
+  };
+}
+
+/**
+ * Appends an edit-log entry to a PAT row (cumulative — history is never lost).
+ * @param {number} rowIndex - 0-based data row index (i.e. sheet row = rowIndex+1)
+ */
+function _appendEditLog(rowIndex, entry) {
+  if (!entry) return;
+  _ensurePATEditLogColumn();
+  var c = _patCols();
+  var sh = _patSheet();
+  if (!sh) return;
+  var cur = sh.getRange(rowIndex + 1, c.EDIT_LOG + 1).getValue();
+  var log = [];
+  try { log = cur ? JSON.parse(cur) : []; } catch (e) { log = []; }
+  if (!Array.isArray(log)) log = [];
+  log.push(entry);
+  // Cap the log so the cell never grows unbounded (keep last 200 entries)
+  if (log.length > 200) log = log.slice(log.length - 200);
+  sh.getRange(rowIndex + 1, c.EDIT_LOG + 1).setValue(JSON.stringify(log));
 }
 
 function _projectFromRow(r) {
@@ -2054,7 +2142,8 @@ function _projectFromRow(r) {
     workflowHistory:   _safeParse(r[c.WORKFLOW_HISTORY], []),
     department:        r[c.DEPARTMENT] || '',
     updatedAt:         r[c.UPDATED_AT] || '',
-    presidingOfficer:  r[c.PRESIDING_OFFICER] || ''
+    presidingOfficer:  r[c.PRESIDING_OFFICER] || '',
+    editLog:            _safeParse(r[c.EDIT_LOG], [])
   };
 }
 
@@ -2279,6 +2368,8 @@ function savePATProject(token, data) {
       row[c.DEPARTMENT]         = String(p.department || '');
       row[c.PRESIDING_OFFICER]  = String(p.presidingOfficer || '');
       row[c.UPDATED_AT]         = now;
+      // Preserve the cumulative edit log (never overwritten by the form)
+      row[c.EDIT_LOG]           = _ensureJSONString(p.editLog, []);
       return row;
     }
 
@@ -2342,6 +2433,14 @@ function savePATProject(token, data) {
             finalRow[c.UPDATED_AT] = now;
             sh.getRange(i + 1, 1, 1, finalRow.length).setValues([finalRow]);
             SpreadsheetApp.flush();
+            // Audit: every edit is logged, cumulative
+            try {
+              var _entryNM = _buildEditLogEntry(sess, existingProject, {
+                workflowStatus: finalRow[c.WORKFLOW_STATUS], assignedToDept: finalRow[c.ASSIGNED_TO_DEPT],
+                snags: _safeParse(finalRow[c.SNAGS], []), images: _safeParse(finalRow[c.IMAGES], [])
+              });
+              _appendEditLog(i, _entryNM);
+            } catch (e) { console.warn('editlog(nonMEC): ' + e.message); }
             return { success: true, projectId: existingId, message: 'Workflow updated successfully.' };
           }
 
@@ -2357,6 +2456,11 @@ function savePATProject(token, data) {
             rowData[c.WORKFLOW_HISTORY]   = data.workflowHistory ? JSON.stringify(data.workflowHistory) : existingData[i][c.WORKFLOW_HISTORY] || '[]';
             sh.getRange(i + 1, 1, 1, rowData.length).setValues([rowData]);
             SpreadsheetApp.flush();
+            // Audit: every edit is logged, cumulative
+            try {
+              var _entryMEC = _buildEditLogEntry(sess, existingProject, rowData);
+              _appendEditLog(i, _entryMEC);
+            } catch (e) { console.warn('editlog(MEC): ' + e.message); }
             return { success: true, projectId: existingId };
           }
 
@@ -2404,6 +2508,13 @@ function savePATProject(token, data) {
     var newRow = _rowFromProject(data);
     sh.appendRow(newRow);
     SpreadsheetApp.flush();
+    // Audit: creation is the first log entry (cumulative history)
+    try {
+      var _newIdx = sh.getLastRow() - 1;
+      var _entryNew = _buildEditLogEntry(sess, {}, data);
+      _entryNew.action = 'created';
+      _appendEditLog(_newIdx, _entryNew);
+    } catch (e) { console.warn('editlog(new): ' + e.message); }
     return { success: true, projectId: newId };
   } catch(e) {
     return { success: false, message: e.message };
@@ -3502,50 +3613,61 @@ function savePATImages(token, projectId, images) {
     const sh = _patSheet();
     if (!sh || sh.getLastRow() < 2) return { success: false, message: 'No projects found.' };
 
-    let finalUrls = []; // OVERWRITE: Use the exact array provided by the frontend
-
-    // Process incoming images
-    if (images && Array.isArray(images)) {
-      for (let i = 0; i < images.length; i++) {
-        if (finalUrls.length >= 4) break; // Hard limit of 4 images
-        const imgStr = images[i];
-        if (typeof imgStr !== 'string') continue;
-        
-        if (finalUrls.indexOf(imgStr) !== -1) continue; // Skip duplicates
-        
-        if (imgStr.indexOf('data:image') === 0) {
-          // New Upload: Convert base64 to Blob and save to Drive
-          const parts = imgStr.split(',');
-          const mime = parts[0].match(/:(.*?);/)[1];
-          const bytes = Utilities.base64Decode(parts[1]);
-          const blob = Utilities.newBlob(bytes, mime, "PAT_" + projectId + "_" + i);
-          const file = folder.createFile(blob);
-          const url = "https://lh3.googleusercontent.com/d/" + file.getId();
-          finalUrls.push(url);
-
-          // Also register this image as a SD_DOCUMENTS row (image -> doc)
-          try {
-            _appendImageDocRow(token, projectId, url, file.getId(), "PAT_" + projectId + "_" + i, mime, bytes.length);
-          } catch (docErr) { console.warn('PAT bulk image doc-row: ' + docErr.message); }
-
-        } else {
-          // Existing link: keep as is
-          finalUrls.push(imgStr);
-        }
-      }
-    }
-
+    const c = _patCols();
     const data = sh.getDataRange().getValues();
     const targetId = String(projectId || '').toUpperCase().trim();
-    const c = _patCols();
+
+    // Find the existing row first
+    let existingRowIdx = -1;
+    let existingUrls = [];
     for (let i = 1; i < data.length; i++) {
       const rowId = String(data[i][0]).toUpperCase().trim();
-      if (rowId === targetId) {
-        sh.getRange(i + 1, c.IMAGES + 1).setValue(JSON.stringify(finalUrls));
-        return { success: true, images: finalUrls };
+      if (rowId === targetId) { existingRowIdx = i; break; }
+    }
+    if (existingRowIdx === -1) return { success: false, message: 'Project not found.' };
+
+    // Start from the URLs ALREADY on the project (so a re-save never wipes them)
+    try { existingUrls = _safeParse(data[existingRowIdx][c.IMAGES], []); } catch (e) { existingUrls = []; }
+    if (!Array.isArray(existingUrls)) existingUrls = [];
+
+    // SAFETY: if the frontend sends an empty array, that means "no new images
+    // were selected" — NOT "delete everything". Keep what's already there.
+    const incoming = (images && Array.isArray(images)) ? images.filter(s => typeof s === 'string' && s.length > 0) : [];
+    if (incoming.length === 0) {
+      return { success: true, images: existingUrls }; // nothing to change, preserve
+    }
+
+    let finalUrls = existingUrls.slice(); // merge mode, not overwrite
+
+    // Process incoming images
+    for (let i = 0; i < incoming.length; i++) {
+      if (finalUrls.length >= 4) break; // Hard limit of 4 images
+      const imgStr = incoming[i];
+      if (finalUrls.indexOf(imgStr) !== -1) continue; // Skip exact duplicates
+
+      if (imgStr.indexOf('data:image') === 0) {
+        // New Upload: Convert base64 to Blob and save to Drive
+        const parts = imgStr.split(',');
+        const mime = parts[0].match(/:(.*?);/)[1];
+        const bytes = Utilities.base64Decode(parts[1]);
+        const blob = Utilities.newBlob(bytes, mime, "PAT_" + projectId + "_" + finalUrls.length);
+        const file = folder.createFile(blob);
+        const url = "https://lh3.googleusercontent.com/d/" + file.getId();
+        finalUrls.push(url);
+
+        // Also register this image as a SD_DOCUMENTS row (image -> doc)
+        try {
+          _appendImageDocRow(token, projectId, url, file.getId(), "PAT_" + projectId + "_" + finalUrls.length, mime, bytes.length);
+        } catch (docErr) { console.warn('PAT bulk image doc-row: ' + docErr.message); }
+
+      } else {
+        // Existing link: keep as is
+        finalUrls.push(imgStr);
       }
     }
-    return { success: false, message: 'Project not found.' };
+
+    sh.getRange(existingRowIdx + 1, c.IMAGES + 1).setValue(JSON.stringify(finalUrls));
+    return { success: true, images: finalUrls };
   } catch(e) {
     return { success: false, message: e.message };
   }
@@ -3570,6 +3692,7 @@ function deletePATImages(token, projectId) {
     for (let i = 1; i < data.length; i++) {
       const rowId = String(data[i][0]).toUpperCase().trim();
       if (rowId === targetId) {
+        // EXPLICIT delete only — never called from a normal save. Wipes confirmed removals.
         sh.getRange(i + 1, c.IMAGES + 1).setValue('[]');
         return { success: true };
       }

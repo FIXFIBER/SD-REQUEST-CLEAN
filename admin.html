@@ -11570,6 +11570,10 @@ case 'OPEN_PAT':
         // ⭐ Load images for this project
         // Load images and documents for this project, then render combined section
         loadProjectImages(projectData.projectId, () => {
+          // CRITICAL FIX: seed patFormImages with the persisted URLs so a
+          // re-save never sees an empty array (which previously wiped images).
+          const persisted = (projectImages[projectData.projectId] || []).slice();
+          patFormImages = patFormImages.concat(persisted.filter(u => patFormImages.indexOf(u) === -1));
           loadProjectDocuments(projectData.projectId, () => {
             refreshPatImagesUI();
           });
@@ -11577,6 +11581,7 @@ case 'OPEN_PAT':
 
         aiFillPATForm(projectData);
         updateWorkflowUI(projectData);
+        startPATAutoSave(); // multi-factor: silent periodic draft save
       } else {
         // Clear form for new project
         // New project - clear all form fields
@@ -11650,6 +11655,7 @@ case 'OPEN_PAT':
       document.body.style.overflow = "";
       patFormImages = [];
       patFormDocuments = [];
+      stopPATAutoSave();
       cancelPATAction();
     }
 
@@ -11681,6 +11687,68 @@ case 'OPEN_PAT':
       if (modalInner && formBody) modalInner.appendChild(formBody);
       currentPMVerdict = "";
     }
+
+    // ── MULTI-FACTOR DRAFT AUTO-SAVE ──────────────────────────
+    // Silently persists the open PAT form on a timer so nothing is lost
+    // between explicit saves (e.g. session timeout, accidental close).
+    let _patAutoSaveTimer = null;
+    let _patAutoSaveDirty = false;
+
+    function startPATAutoSave() {
+      stopPATAutoSave(); // clear any prior timer
+      _patAutoSaveDirty = false;
+      _patAutoSaveTimer = setInterval(function () {
+        // Only auto-save if a project form is open
+        const modalOpen = document.getElementById("pat-modal") && document.getElementById("pat-modal").style.display === "block";
+        const sideOpen = document.getElementById("ai-side-panel") && document.getElementById("ai-side-panel").style.display === "flex";
+        if (!modalOpen && !sideOpen) return;
+        if (!currentEditingProject) return;
+        // Mark form interacted-with: any data present counts as savable
+        const pd = collectPATData();
+        if (!pd.projectName && !pd.siteAddress) return; // nothing meaningful to save
+        if (!_patAutoSaveDirty) return; // skip until user actually changed something
+        // Silent save (action 'stay' — does not close the modal)
+        try {
+          const saveBtn = document.getElementById('btn-save-draft');
+          const origHtml = saveBtn ? saveBtn.innerHTML : '';
+          gasCall('savePATProject', [pd], function (res) {
+            if (res && res.success) {
+              const pid = res.projectId || (currentEditingProject ? currentEditingProject.projectId : '');
+              if (pid && patFormImages.length > 0) {
+                gasCall('savePATImages', [pid, patFormImages], function (imgRes) {
+                  if (imgRes && imgRes.success && Array.isArray(imgRes.images)) {
+                    patFormImages = imgRes.images;
+                    if (currentEditingProject) currentEditingProject.patFormImages = patFormImages;
+                    refreshPatImagesUI();
+                  }
+                });
+              }
+              if (!currentEditingProject) currentEditingProject = { projectId: pid, workflowStatus: 'Draft' };
+              console.log('[auto-save] draft saved ' + pid);
+              _patAutoSaveDirty = false;
+            }
+          });
+        } catch (e) { console.warn('[auto-save] error: ' + e.message); }
+      }, 60000); // every 60 seconds
+    }
+
+    function stopPATAutoSave() {
+      if (_patAutoSaveTimer) { clearInterval(_patAutoSaveTimer); _patAutoSaveTimer = null; }
+    }
+
+    function markPATDirty() { _patAutoSaveDirty = true; }
+
+    // Attach dirty-flag listeners once the form body exists
+    (function wirePATDirtyTracking() {
+      function _wire() {
+        const fb = document.getElementById('pat-form-body');
+        if (!fb) { setTimeout(_wire, 500); return; }
+        fb.addEventListener('input', markPATDirty);
+        fb.addEventListener('change', markPATDirty);
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _wire);
+      else _wire();
+    })();
 
     function collectPATData() {
       const p = currentEditingProject || {};
@@ -13610,6 +13678,43 @@ case 'OPEN_PAT':
       });
     }
 
+    function renderEditLogPanel(project) {
+      const log = (project && project.editLog) ? project.editLog : [];
+      if (!Array.isArray(log) || log.length === 0) {
+        return `<div style="margin-top:18px;background:#f8fafc;border:1px solid #e2e4e9;border-radius:10px;padding:14px;color:#8a90a0;font-size:12px">
+          <i class="ti ti-history"></i> No edit history yet. Every change by any department is recorded here.
+        </div>`;
+      }
+      const rows = log.slice().reverse().map(function (e) {
+        const when = e.at ? new Date(e.at).toLocaleString('en-GB') : '—';
+        const who = _esc(e.by || 'Unknown') + (e.dept ? ' · ' + _esc(e.dept) : '') + (e.role ? ' (' + _esc(e.role) + ')' : '');
+        const changes = (e.changed && e.changed.length)
+          ? e.changed.map(function (c) { return '<span style="background:#eef2ff;color:#1a3faa;padding:1px 6px;border-radius:4px;font-size:11px;margin:2px 2px 0 0;display:inline-block">' + _esc(c) + '</span>'; }).join('')
+          : '<span style="color:#64748b;font-size:11px">no field changes</span>';
+        const status = (e.statusBefore && e.statusAfter && e.statusBefore !== e.statusAfter)
+          ? '<div style="font-size:11px;color:#475569;margin-top:4px">Status: <b>' + _esc(e.statusBefore) + '</b> &rarr; <b>' + _esc(e.statusAfter) + '</b></div>'
+          : '';
+        const actionBadge = e.action === 'created'
+          ? '<span style="background:#dcfce7;color:#166534;padding:1px 8px;border-radius:4px;font-size:11px;font-weight:600">CREATED</span>'
+          : '<span style="background:#eef2ff;color:#1a3faa;padding:1px 8px;border-radius:4px;font-size:11px;font-weight:600">EDITED</span>';
+        return `<div style="border-bottom:1px solid #eef2f7;padding:10px 0">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <div style="font-size:12px;font-weight:600;color:#0d1526">${who}</div>
+            ${actionBadge}
+          </div>
+          <div style="font-size:11px;color:#8a90a0;margin-top:2px">${when}</div>
+          <div style="margin-top:4px">${changes}</div>
+          ${status}
+        </div>`;
+      }).join('');
+      return `<div style="margin-top:18px;background:#fff;border:1px solid #e2e4e9;border-radius:10px;padding:16px">
+        <div style="font-weight:700;font-size:13px;text-transform:uppercase;color:#1a3faa;display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <i class="ti ti-history"></i> Edit History (${log.length})
+        </div>
+        <div style="max-height:280px;overflow-y:auto">${rows}</div>
+      </div>`;
+    }
+
     function showProjectQuickView(project) {
       // Escape all user-controlled fields at once
       var _q = {
@@ -13954,6 +14059,7 @@ case 'OPEN_PAT':
         Close
       </button>
     </div>
+    ${renderEditLogPanel(project)}
   `;
 
       document.getElementById('project-quick-view-content').innerHTML = html;
