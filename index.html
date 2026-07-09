@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Initializing... | FiberOne</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@1,700;1,900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --corp-blue: #003399;
+            --corp-red: #E50000;
+            --bg-color: #fcfcfd;
+            --grid-color: rgba(0, 51, 153, 0.05);
+            --easing: cubic-bezier(0.25, 1, 0.5, 1);
+            --spring-easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+            --subtext-color: rgba(0, 51, 153, 0.5);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* --- Background Layer: Infrastructure Grid --- */
+        #loader-wrapper {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            background: var(--bg-color);
+            perspective: 1000px;
+        }
+
+        #network-grid {
+            position: absolute;
+            inset: -10%;
+            width: 120%;
+            height: 120%;
+            background-image: 
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 50px 50px;
+            background-position: center center;
+            transform: translateZ(0);
+            will-change: transform;
+            transition: transform 0.1s ease-out;
+        }
+
+        /* --- Canvas for Fiber Pulses --- */
+        #fiber-canvas {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        /* --- Logo Container --- */
+        .logo-assembly {
+            position: relative;
+            display: block;
+            text-align: center;
+            align-items: center;
+            justify-content: center;
+            transform: translateZ(50px);
+        }
+
+        /* --- Alignment Mechanics --- */
+        .alignment-frame {
+            position: absolute; 
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 440px;
+            height: 160px;
+            pointer-events: none;
+        }
+
+        .crosshair {
+            position: absolute;
+            background: var(--corp-blue);
+            opacity: 0;
+        }
+
+        .ch-tl { top: 0; left: 0; width: 2px; height: 20px; }
+        .ch-tl::after { content: ''; position: absolute; top: 0; left: 0; width: 20px; height: 2px; background: inherit; }
+        
+        .ch-br { bottom: 0; right: 0; width: 2px; height: 20px; }
+        .ch-br::after { content: ''; position: absolute; bottom: 0; right: 0; width: 20px; height: 2px; background: inherit; }
+
+        .alignment-axis {
+            position: absolute;
+            background: rgba(0, 51, 153, 0.1);
+            opacity: 0;
+        }
+        .axis-h { width: 100vw; height: 1px; top: 50%; left: -50vw; }
+        .axis-v { height: 100vh; width: 1px; left: 50%; top: -50vh; }
+
+        /* --- Brand Typography & Wordmark --- */
+        .brand-wordmark {
+            display: inline-flex;
+            align-items: baseline;
+            font-weight: 900;
+            font-style: italic;
+            font-size: 100px; /* Boosted scale */
+            color: var(--corp-blue);
+            opacity: 0;
+            transform: scale(0.95);
+            transition: all 0.8s var(--easing);
+            letter-spacing: -0.04em;
+            user-select: none;
+        }
+
+        .custom-o {
+            width: 76px;
+            height: 76px;
+            margin: 0 4px;
+            transform: translateY(10px) skewX(-12deg);
+            overflow: visible;
+        }
+
+        .o-path-main {
+            fill: var(--corp-blue);
+        }
+
+        .red-swoosh {
+            fill: var(--corp-red);
+            stroke: none;
+            opacity: 0;
+            transform: scale(0.6) translateY(5px);
+            transform-origin: center;
+            transition: opacity 0.8s var(--easing), transform 1s var(--spring-easing);
+            will-change: transform, opacity;
+        }
+
+        .red-swoosh.active {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+
+        .subtext {
+            font-size: 13px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 8px;
+            color: var(--subtext-color);
+            margin-top: 15px;
+            opacity: 0;
+            transform: translateY(10px);
+            will-change: transform, opacity;
+        }
+
+        /* --- The Ripple --- */
+        .shockwave {
+            position: absolute;
+            border-radius: 50%;
+            border: 2px solid var(--corp-red);
+            width: 10px;
+            height: 10px;
+            opacity: 0;
+            pointer-events: none;
+            transform-origin: center;
+        }
+
+        /* --- Animations --- */
+        @keyframes axisReveal {
+            0% { opacity: 0; transform: scale(1.2); }
+            50% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(0.9); }
+        }
+
+        @keyframes rippleEffect {
+            0% { transform: scale(0); opacity: 0.8; }
+            100% { transform: scale(400); opacity: 0; }
+        }
+
+        .fade-out {
+            opacity: 0;
+            transition: opacity 0.8s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loader-wrapper">
+        <div id="network-grid"></div>
+        <canvas id="fiber-canvas"></canvas>
+        
+        <div class="alignment-axis axis-h" id="axis-h"></div>
+        <div class="alignment-axis axis-v" id="axis-v"></div>
+
+        <div class="logo-assembly">
+            <div class="alignment-frame">
+                <div class="crosshair ch-tl" id="ch-tl"></div>
+                <div class="crosshair ch-br" id="ch-br"></div>
+            </div>
+
+            <div class="brand-wordmark" id="brand-wordmark">
+                <span>Fiber</span>
+                <svg class="custom-o" viewBox="0 0 45 50">
+                    <path class="o-path-main" d="M21.5,2.1C32.1,2.1,41,12.2,41,24.7s-8.9,22.6-19.5,22.6S2,37.2,2,24.7S10.9,2.1,21.5,2.1z M21.5,10.5 c-5.5,0-10,6.4-10,14.2s4.5,14.2,10,14.2s10-6.4,10-14.2S27,10.5,21.5,10.5z"/>
+                    <!-- Solid crescent fill flush with interior counter -->
+                    <path id="swoosh-path" class="red-swoosh" d="M11.5,35 Q21.5,43 31.5,35 Q21.5,39 11.5,35 Z" />
+                </svg>
+                <span>ne</span>
+            </div>
+
+            <div class="subtext" id="portal-subtext">PAT Internal Portal</div>
+
+            <div class="shockwave" id="ripple"></div>
+        </div>
+    </div>
+
+    <script>
+        var scriptUrl = "<?= scriptUrl ?>";
+
+        /**
+         * FiberOne High-End Loader Sequence
+         * Performance Focused: Canvas + CSS Transitions
+         */
+
+        const wrapper = document.getElementById('loader-wrapper');
+        const grid = document.getElementById('network-grid');
+        const canvas = document.getElementById('fiber-canvas');
+        const ctx = canvas.getContext('2d');
+        const logo = document.getElementById('brand-wordmark');
+        const subtext = document.getElementById('portal-subtext');
+        const swoosh = document.getElementById('swoosh-path');
+        const ripple = document.getElementById('ripple');
+
+        let width, height;
+        let pulses = [];
+        let pulseSpeedMultiplier = 1;
+        
+        // Resize Logic
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Pulse Class (Canvas Particles)
+        class FiberPulse {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                this.horizontal = Math.random() > 0.5;
+                this.pos = Math.random() * (this.horizontal ? height : width);
+                this.coord = 0;
+                this.speed = (Math.random() * 5 + 2);
+                this.length = Math.random() * 100 + 50;
+                this.opacity = Math.random() * 0.5 + 0.1;
+            }
+            update() {
+                this.coord += this.speed * pulseSpeedMultiplier;
+                if (this.coord > (this.horizontal ? width : height) + this.length) {
+                    this.reset();
+                }
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.globalAlpha = this.opacity;
+                const grad = this.horizontal 
+                    ? ctx.createLinearGradient(this.coord - this.length, 0, this.coord, 0)
+                    : ctx.createLinearGradient(0, this.coord - this.length, 0, this.coord);
+                
+                grad.addColorStop(0, 'transparent');
+                grad.addColorStop(1, '#003399');
+                ctx.strokeStyle = grad;
+                ctx.lineWidth = 1;
+
+                if (this.horizontal) {
+                    ctx.moveTo(this.coord - this.length, this.pos);
+                    ctx.lineTo(this.coord, this.pos);
+                } else {
+                    ctx.moveTo(this.pos, this.coord - this.length);
+                    ctx.lineTo(this.pos, this.coord);
+                }
+                ctx.stroke();
+            }
+        }
+
+        // Initialize 30 background pulses
+        for(let i=0; i<30; i++) pulses.push(new FiberPulse());
+
+        function animateBackground() {
+            ctx.clearRect(0, 0, width, height);
+            pulses.forEach(p => {
+                p.update();
+                p.draw();
+            });
+            requestAnimationFrame(animateBackground);
+        }
+        animateBackground();
+
+        // Micro-Interaction: Parallax
+        window.addEventListener('mousemove', (e) => {
+            const moveX = (e.clientX - width/2) / 50;
+            const moveY = (e.clientY - height/2) / 50;
+            grid.style.transform = `translate3d(${moveX}px, ${moveY}px, 0)`;
+        });
+
+        // --- The Sequence Orchestration ---
+
+        async function startSequence() {
+            // 1. Alignment Phase (Crosshairs)
+            const axisH = document.getElementById('axis-h');
+            const axisV = document.getElementById('axis-v');
+            const chTL = document.getElementById('ch-tl');
+            const chBR = document.getElementById('ch-br');
+
+            // Ensure fonts are ready before measuring for alignment
+            await document.fonts.ready;
+
+            // Snap Axis
+            axisH.style.opacity = '1';
+            axisV.style.opacity = '1';
+            axisH.style.animation = 'axisReveal 0.6s var(--easing) forwards';
+            axisV.style.animation = 'axisReveal 0.6s var(--easing) forwards';
+
+            await new Promise(r => setTimeout(r, 200));
+
+            // Crosshairs
+            chTL.style.opacity = '1';
+            chBR.style.opacity = '1';
+            chTL.style.transition = 'all 0.5s var(--easing)';
+            chBR.style.transition = 'all 0.5s var(--easing)';
+            chTL.style.transform = 'translate(-20px, -20px)';
+            chBR.style.transform = 'translate(20px, 20px)';
+
+            // Pre-fade subtext entrance preparation
+            subtext.style.transition = 'all 0.8s var(--easing) 0.2s';
+            setTimeout(() => {
+                subtext.style.opacity = '1';
+                subtext.style.transform = 'translateY(0)';
+            }, 300);
+
+            await new Promise(r => setTimeout(r, 400));
+
+            // 2. Logo Assembly
+            logo.style.transition = 'all 0.8s var(--easing)';
+            logo.style.opacity = '1';
+            logo.style.transform = 'scale(1)';
+            
+            // Momentary Acceleration
+            pulseSpeedMultiplier = 8;
+            setTimeout(() => { pulseSpeedMultiplier = 1; }, 400);
+
+            // Fade out alignment helpers
+            chTL.style.opacity = '0';
+            chBR.style.opacity = '0';
+
+            await new Promise(r => setTimeout(r, 800));
+
+            // 3. The Red Swoosh Impact
+            swoosh.classList.add('active');
+
+            // 4. THE 3-SECOND RULE: Enforce a solid hold window
+            // This allows the branding to sit and the background pulses to animate normally
+            await new Promise(r => setTimeout(r, 3000));
+
+            await new Promise(r => setTimeout(r, 550));
+
+            // 4. The Climax Ripple
+            // Origin centered on the inner swoosh impact point
+            const swooshRect = swoosh.getBoundingClientRect();
+            const rippleX = swooshRect.left + swooshRect.width / 2;
+            const rippleY = swooshRect.top + swooshRect.height / 2;
+            
+            ripple.style.left = rippleX + 'px';
+            ripple.style.top = rippleY + 'px';
+            ripple.style.animation = 'rippleEffect 1.2s ease-out forwards';
+
+            await new Promise(r => setTimeout(r, 400));
+
+            // Final Transition
+            wrapper.classList.add('fade-out');
+            
+            await new Promise(r => setTimeout(r, 800));
+            
+            // Cleanup & Redirect
+            cleanupAndRedirect();
+        }
+
+        function cleanupAndRedirect() {
+            // Navigate to the auth page. 
+            // If running in GAS, use scriptUrl. If running locally, use auth.html.
+            if (scriptUrl && scriptUrl !== "<?= scriptUrl ?>") {
+                var dest = scriptUrl + '?page=auth';
+                window.location.href = dest;
+            } else {
+                window.location.href = 'auth.html';
+            }
+        }
+
+        // Boot sequence on load
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(startSequence, 500);
+        });
+
+        // Performance Note: Using will-change for the heavy layers
+        grid.style.willChange = 'transform';
+        logo.style.willChange = 'transform, opacity';
+    </script>
+
+    <!-- Fallback if JS fails -->
+    <noscript>
+        <style>
+            #loader-wrapper { display: none; }
+        </style>
+        <div style="padding: 20px; text-align: center;">
+            <h1>FiberOne Internal Portal</h1>
+            <p>Please enable JavaScript to continue.</p>
+            <a href="?page=auth">Go to Login</a>
+        </div>
+    </noscript>
+</body>
+</html>

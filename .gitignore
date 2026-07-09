@@ -1,0 +1,6 @@
+.vercel
+.env*.local
+logs/
+.repo-memory/
+.continue/
+.clasp.json
