@@ -9890,6 +9890,7 @@ case 'OPEN_PAT':
         const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico', 'tiff', 'tif'];
         const isImage = (file.type && file.type.startsWith('image/')) || imageExts.indexOf(ext) !== -1;
         if (isImage) {
+          const projectId = currentEditingProject ? currentEditingProject.projectId : null;
           const remaining = 4 - patFormImages.length;
           if (remaining <= 0) {
             showFrontendMessage('Maximum 4 images allowed. Remove an image first.', 'warning');
@@ -9899,8 +9900,32 @@ case 'OPEN_PAT':
           const procFile = await compressImageFile(file);
           const reader = new FileReader();
           reader.onload = function (e) {
-            patFormImages.push(e.target.result);
-            refreshPatImagesUI();
+            const dataUri = e.target.result;
+            if (projectId) {
+              // Upload IMMEDIATELY (mirrors document behaviour) so it persists
+              // to Drive and is registered as a Site Document row on the backend.
+              showFrontendMessage('Uploading image…', 'info');
+              gasCall('savePATImages', [projectId, [dataUri]], function (imgRes) {
+                if (imgRes && imgRes.success && Array.isArray(imgRes.images)) {
+                  // Replace local queue with the server's authoritative URLs
+                  // (prevents duplicates and guarantees the image is "uploaded").
+                  patFormImages = imgRes.images.slice();
+                  refreshPatImagesUI();
+                  showFrontendMessage('Image uploaded.', 'success');
+                } else {
+                  // Network/server failure — keep a local preview; it will be
+                  // pushed on the next Save.
+                  patFormImages.push(dataUri);
+                  refreshPatImagesUI();
+                  showFrontendMessage('Image queued — save the project to finish the upload.', 'warning');
+                }
+              });
+            } else {
+              // New (unsaved) project: queue locally; it uploads on first Save.
+              patFormImages.push(dataUri);
+              refreshPatImagesUI();
+              showFrontendMessage('Image added — save the project to upload it.', 'info');
+            }
           };
           reader.onerror = function () {
             showFrontendMessage('Failed to read image file: ' + (file.name || 'unknown'), 'error');
