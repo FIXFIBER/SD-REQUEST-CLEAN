@@ -7529,9 +7529,9 @@ function geocodeAddressBtnClick() {
           if (analysis.lat) document.getElementById('pm-lat').value = analysis.lat;
           if (analysis.lon) document.getElementById('pm-lon').value = analysis.lon;
           if (analysis.vendor) document.getElementById('pm-vendor').value = analysis.vendor;
-          if (analysis.orchestrator) document.getElementById('pm-orchestrator').value = analysis.orchestrator;
+          if (analysis.orchestrator) setSelectValueSafe(document.getElementById('pm-orchestrator'), analysis.orchestrator);
           if (analysis.workDescription) document.getElementById('pm-desc').value = analysis.workDescription;
-          if (analysis.inspectionDate) document.getElementById('pm-date').value = analysis.inspectionDate;
+          if (analysis.inspectionDate) document.getElementById('pm-date').value = normalizeDateInput(analysis.inspectionDate);
           if (analysis.presidingOfficer) document.getElementById('pm-presiding-officer').value = analysis.presidingOfficer;
 
           if (analysis.checklist && typeof analysis.checklist === 'object') {
@@ -9399,6 +9399,38 @@ case 'OPEN_PAT':
     }
 
     // Render combined Site Documents section (images + documents)
+    // ── SAFE FIELD HELPERS (persistence hardening) ────────────
+    // A <select> silently blanks if you assign a value that isn't a
+    // predefined <option>. This injects the saved value as a selected
+    // option so stored data is NEVER lost on edit.
+    function setSelectValueSafe(sel, val) {
+      if (!sel) return;
+      val = (val == null) ? '' : String(val);
+      if (val === '') { sel.value = ''; return; }
+      let found = false;
+      for (let i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === val) { found = true; break; }
+      }
+      if (!found) {
+        const o = document.createElement('option');
+        o.value = val; o.text = val; sel.appendChild(o);
+      }
+      sel.value = val;
+    }
+
+    // type=date inputs ONLY accept YYYY-MM-DD. Anything else (ISO timestamp,
+    // display string) silently fails and shows blank. Normalize safely.
+    function normalizeDateInput(val) {
+      if (!val) return '';
+      // Already YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return '';
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return d.getFullYear() + '-' + m + '-' + day;
+    }
+
     function renderSiteDocuments(projectId, imagesArr, docsArr, canUpload = false) {
       if (!projectId && !canUpload) return '';
       const images = imagesArr || (projectId ? projectImages[projectId] : []) || [];
@@ -9418,19 +9450,33 @@ case 'OPEN_PAT':
         html += `<div style="text-align:center;padding:30px;color:#8a90a0;font-size:12px;border:1px dashed #cbd5e1;border-radius:8px">No files uploaded for this project yet. Use the + button to add images and documents.</div>`;
       }
 
-      // Render images grid
+      // Render images as preview cards (consistent with document cards)
       if (images.length > 0) {
         html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:${docs.length > 0 ? '16px' : '0'}">`;
         images.forEach((img, i) => {
           const safeSrc = (img && img.length > 20) ? img : 'https://placehold.co/400x300?text=Invalid+Data';
-          html += `<div style="position:relative;width:100%;aspect-ratio:4/3;background:#f1f5f9;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;">
-          <img src="${safeSrc}" 
-               loading="lazy"
-               style="width:100%;height:100%;object-fit:cover;cursor:zoom-in;transition:transform 0.3s" 
-               onerror="this.src='https://placehold.co/400x300?text=Load+Failed'; this.style.opacity='0.6';"
-               onclick="window.open(this.src, '_blank')">
-        ${canUpload ? `<button onclick="removePatImage(${i})" style="position:absolute;top:5px;right:5px;background:rgba(220,38,38,0.9);color:#fff;border:none;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size:10px">×</button>` : ''}
-      </div>`;
+          // Derive a friendly label + size when the image is a doc-row reference
+          const label = (img && img._label) ? img._label : ('Site Photo ' + (i + 1));
+          const sizeStr = (img && img._size) ? formatFileSize(img._size) : '';
+          const imgCard = (typeof img === 'object') ? img : null;
+          const src = imgCard && imgCard.url ? imgCard.url : safeSrc;
+          const name = imgCard && imgCard.fileName ? imgCard.fileName : label;
+          const sz = imgCard && imgCard.fileSize ? formatFileSize(imgCard.fileSize) : sizeStr;
+          html += `<div style="position:relative;background:#f8fafc;border:1px solid #e2e4e9;border-radius:8px;overflow:hidden">
+            <div style="position:relative;width:100%;aspect-ratio:4/3;background:#f1f5f9;overflow:hidden">
+              <img src="${src}"
+                   loading="lazy"
+                   style="width:100%;height:100%;object-fit:cover;cursor:zoom-in;transition:transform 0.3s"
+                   onerror="this.src='https://placehold.co/400x300?text=Load+Failed'; this.style.opacity='0.6';"
+                   onclick="window.open(this.src, '_blank')">
+              ${canUpload ? `<button onclick="removePatImage(${i})" style="position:absolute;top:5px;right:5px;background:rgba(220,38,38,0.9);color:#fff;border:none;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size:10px">×</button>` : ''}
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;padding:6px 8px">
+              <i class="ti ti-photo" style="color:#1a3faa;font-size:14px"></i>
+              <span style="flex:1;font-size:12px;font-weight:500;color:#1a3faa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(name)}</span>
+              ${sz ? `<span style="font-size:11px;color:#64748b">${sz}</span>` : ''}
+            </div>
+          </div>`;
         });
         html += `</div>`;
       }
@@ -11582,9 +11628,13 @@ case 'OPEN_PAT':
         document.getElementById("pm-lon").value = projectData.lon || "";
         document.getElementById("pm-vendor").value = projectData.vendor || "";
         document.getElementById("pm-desc").value = projectData.workDescription || "";
-        document.getElementById("pm-orchestrator").value = projectData.orchestrator || "";
+        // Reviewing Team is a <select>: inject the saved value if it isn't a
+        // predefined option so the stored team is NEVER silently blanked.
+        setSelectValueSafe(document.getElementById("pm-orchestrator"), projectData.orchestrator);
         document.getElementById("pm-presiding-officer").value = projectData.presidingOfficer || "";
-        if (projectData.inspectionDate) document.getElementById("pm-date").value = projectData.inspectionDate;
+        // Inspection Date: type=date only accepts YYYY-MM-DD — normalize so a
+        // saved ISO/timestamp value round-trips instead of showing blank.
+        document.getElementById("pm-date").value = normalizeDateInput(projectData.inspectionDate);
 
         // Show reset button for MEC/Admin; show "View only" lock badge for everyone else
         const resetBtn = document.getElementById('btn-reset-site-info');
@@ -11841,7 +11891,7 @@ case 'OPEN_PAT':
         phase: p.phase || "",
         workDescription: (canEditSite || !projectId) ? document.getElementById("pm-desc").value.trim() : (p.workDescription || ""),
         vendor: (canEditSite || !projectId) ? document.getElementById("pm-vendor").value.trim() : (p.vendor || ""),
-        inspectionDate: (canEditSite || !projectId) ? document.getElementById("pm-date").value : (p.inspectionDate || ""),
+        inspectionDate: (canEditSite || !projectId) ? normalizeDateInput(document.getElementById("pm-date").value) : (p.inspectionDate || ""),
         orchestrator: (canEditSite || !projectId) ? document.getElementById("pm-orchestrator").value.trim() : (p.orchestrator || ""),
         presidingOfficer: (canEditSite || !projectId) ? document.getElementById("pm-presiding-officer").value.trim() : (p.presidingOfficer || ""),
         assignedToDept: currentEditingProject ? currentEditingProject.assignedToDept : '',
