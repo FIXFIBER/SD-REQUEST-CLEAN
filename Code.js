@@ -143,6 +143,9 @@ function onOpen() {
        .addItem("🤖 Setup Employee Check-ins","setupEmployeeCheckins")
       .addItem("👤 Set MEC Head",          "ui_setMecHead")
       .addItem("🗑️  Clear All Sessions",    "clearAllSessions")
+      .addItem("🔓 Force Unban by Email", "ui_forceUnbanByEmail")
+      .addSeparator()
+      .addItem("🧾 Seed Audit Department", "runFirstSetup")
       .addSeparator()
       .addItem("📊 View Live Stats",        "ui_liveStats")
       .addItem("🏥 System Health Check",   "ui_healthCheck")
@@ -179,8 +182,8 @@ function runFirstSetup() {
   var config = _getConfig();
 
   // 1. SD_USERS
-  // UserID | Name | Email | PasswordHash | Salt | Role | Department | Gender | WorkflowNotes | Status | CreatedAt | LastLoginAt | AllowMessages | AIAutoAnswer
-  var users = _sheet(SD.USERS, ["UserID","Name","Email","PasswordHash","Salt","Role","Department","Gender","WorkflowNotes","Status","CreatedAt","LastLoginAt","AllowMessages","AIAutoAnswer","LoginIPs"]);
+  // UserID | Name | Email | PasswordHash | Salt | Role | Department | Gender | WorkflowNotes | Status | CreatedAt | LastLoginAt | AllowMessages | AIAutoAnswer | LoginIPs | Fingerprints | BanReason | BannedBy
+  var users = _sheet(SD.USERS, ["UserID","Name","Email","PasswordHash","Salt","Role","Department","Gender","WorkflowNotes","Status","CreatedAt","LastLoginAt","AllowMessages","AIAutoAnswer","LoginIPs","Fingerprints","BanReason","BannedBy"]);
   _repairUserSheet(users);
 
   // 2. SD_DEPARTMENTS
@@ -258,7 +261,37 @@ function runFirstSetup() {
     });
   }
 
+  // Seed the Audit department + its portal admin account (idempotent)
+  _seedAuditDepartment();
+
   ss.toast("✅ SD Portal Setup Complete — v1.0 Ready", "Setup", 5);
+}
+
+/**
+ * Idempotently seed the Audit department and its portal admin account.
+ * Safe to call repeatedly — only creates when missing.
+ */
+function _seedAuditDepartment() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var config = _getConfig();
+    var deptSh = ss.getSheetByName(SD.DEPTS);
+    if (deptSh && deptSh.getLastRow() >= 2) {
+      var dData = deptSh.getDataRange().getValues().slice(1);
+      var hasAudit = dData.some(function(r) { return String(r[1] || '').toLowerCase() === 'audit'; });
+      if (!hasAudit) deptSh.appendRow([_genId("DEPT"), "Audit", "", new Date().toISOString(), "system"]);
+    }
+    var userSh = ss.getSheetByName(SD.USERS);
+    if (userSh && userSh.getLastRow() >= 2) {
+      var uData = userSh.getDataRange().getValues().slice(1);
+      var hasAuditAdmin = uData.some(function(r) { return String(r[2] || '').toLowerCase() === ('audit' + config.DOMAIN); });
+      if (!hasAuditAdmin) {
+        _createUserRow("Audit Admin", "audit" + config.DOMAIN, "audit123", SD.ADMIN, "Audit", "Other", "TRUE", "FALSE");
+      }
+    }
+  } catch (e) {
+    console.warn("_seedAuditDepartment: " + e.message);
+  }
 }
 
 /**
@@ -312,14 +345,14 @@ function _repairUserSheet(sh) {
   if (lastRow < 2) return;
   
   var data = sh.getDataRange().getValues();
-  var headers = ["UserID","Name","Email","PasswordHash","Salt","Role","Department","Gender","WorkflowNotes","Status","CreatedAt","LastLoginAt","AllowMessages","AIAutoAnswer"];
+  var headers = ["UserID","Name","Email","PasswordHash","Salt","Role","Department","Gender","WorkflowNotes","Status","CreatedAt","LastLoginAt","AllowMessages","AIAutoAnswer","LoginIPs","Fingerprints","BanReason","BannedBy"];
   var repaired = [headers];
 
   for (var i = 1; i < data.length; i++) {
     var r = data[i];
     if (r.filter(String).length === 0) continue; 
 
-    var row = new Array(14).fill("");
+    var row = new Array(18).fill("");
 
     var emailIdx = -1;
     if (String(r[0]).indexOf("@") !== -1) emailIdx = 0;
@@ -329,7 +362,7 @@ function _repairUserSheet(sh) {
     if (emailIdx === -1) continue; 
 
     if (String(r[0]).startsWith("USR-")) {
-      for (var j = 0; j < Math.min(r.length, 14); j++) row[j] = r[j];
+      for (var j = 0; j < Math.min(r.length, 18); j++) row[j] = r[j];
       if (!row[7]) row[7] = "Other";
       if (!row[9]) row[9] = "active";
       if (!row[12]) row[12] = "TRUE";
@@ -369,9 +402,9 @@ function _repairUserSheet(sh) {
   }
   
   sh.clear();
-  sh.getRange(1, 1, repaired.length, 14).setValues(repaired);
+  sh.getRange(1, 1, repaired.length, 18).setValues(repaired);
   var config = _getConfig();
-  sh.getRange(1, 1, 1, 14).setBackground(config.NAVY).setFontColor("#ffffff").setFontWeight("bold");
+  sh.getRange(1, 1, 1, 18).setBackground(config.NAVY).setFontColor("#ffffff").setFontWeight("bold");
 }
 
 // Create a sheet only if it doesn't exist; returns the sheet either way
@@ -459,12 +492,39 @@ function _createSession(email, name, role, department) {
       expires:    new Date().getTime() + config.TOKEN_TTL,
     });
     PropertiesService.getUserProperties().setProperty("tok_" + token, payload);
+    // ── TOKEN INDEX (peak security) ──
+    // Track which tokens belong to an email so a ban can force-logout ALL live sessions.
+    try {
+      var idxKey = "tokidx_" + email.toLowerCase();
+      var idx = PropertiesService.getUserProperties().getProperty(idxKey);
+      var list = idx ? idx.split(",") : [];
+      if (list.indexOf(token) === -1) list.push(token);
+      // Cap to last 10 sessions per user
+      if (list.length > 10) list = list.slice(list.length - 10);
+      PropertiesService.getUserProperties().setProperty(idxKey, list.join(","));
+    } catch (e) { console.warn("token index write failed: " + e.message); }
   } catch (e) {
     throw new Error("Unable to create session: " + e.message);
   } finally {
     lock.releaseLock();
   }
   return token;
+}
+
+/**
+ * Force-logout every active session for an email (used on ban).
+ * @param {string} email
+ */
+function _purgeUserSessions(email) {
+  try {
+    var idxKey = "tokidx_" + String(email || '').toLowerCase();
+    var idx = PropertiesService.getUserProperties().getProperty(idxKey);
+    if (!idx) return;
+    idx.split(",").forEach(function(t) {
+      if (t) PropertiesService.getUserProperties().deleteProperty("tok_" + t);
+    });
+    PropertiesService.getUserProperties().deleteProperty(idxKey);
+  } catch (e) { console.warn("purge sessions failed: " + e.message); }
 }
 
 /**
@@ -483,7 +543,47 @@ function _session(token) {
     PropertiesService.getUserProperties().deleteProperty("tok_" + token);
     throw new Error("Session expired. Please sign in again.");
   }
+  // ── BAN ENFORCEMENT (peak security) ──
+  // A banned account cannot use ANY endpoint, even with a valid token.
+  // The authoritative status is read from the users sheet on every call.
+  try {
+    var bannedInfo = _getBanInfoFromDb(s.email);
+    if (bannedInfo && bannedInfo.banned) {
+      throw new Error("__BANNED__::" + (bannedInfo.reason || "Account suspended by an administrator.") +
+        "::" + (bannedInfo.bannedBy || "Administrator"));
+    }
+  } catch (e) {
+    if (String(e.message || "").indexOf("__BANNED__") === 0) throw e;
+    // On lookup failure, fail open (do not lock out valid users) but log it.
+    console.warn("_session ban check failed: " + e.message);
+  }
   return s;
+}
+
+/**
+ * Reads a user's current status + ban reason directly from the USERS sheet.
+ * Returns { banned: bool, reason: string, bannedBy: string } or null on error.
+ * @param {string} email
+ */
+function _getBanInfoFromDb(email) {
+  var normEmail = String(email || '').toLowerCase().trim();
+  if (!normEmail) return null;
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SD.USERS);
+  if (!sh || sh.getLastRow() < 2) return null;
+  var data = sh.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][2] || '').toLowerCase().trim() === normEmail) {
+      var status = String(data[i][9] || '').toLowerCase();
+      var reason = String(data[i][16] || '');   // BanReason column (index 16 / 1-based col 17)
+      var bannedBy = String(data[i][17] || '');  // BannedBy column (index 17 / 1-based col 18)
+      return {
+        banned: status === 'banned',
+        reason: reason,
+        bannedBy: bannedBy
+      };
+    }
+  }
+  return null;
 }
 
 /**
@@ -598,17 +698,29 @@ function _genId(prefix) {
  */
 function adminCreateUser(token, name, email, password, department, role, gender) {
   try {
-    _superAdminSession(token);
+    _superAdminSession(token); // ONLY super admin can create users (incl. admins/audit)
     var config = _getConfig();
     email = String(email || "").toLowerCase().trim();
     role = String(role || SD.EMPLOYEE).toLowerCase().trim();
     gender = String(gender || "Other").trim();
 
-    if (!name || !email || !password || !department)
+    // Audit is a first-class role, not a normal department. When role === 'audit',
+    // force the department to 'Audit' so the audit console recognises it.
+    var effectiveDept = department;
+    if (role === 'audit') effectiveDept = 'Audit';
+
+    if (!name || !email || !password || !effectiveDept)
       throw new Error("Name, email, password, and department are required.");
     if (!email.endsWith(config.DOMAIN))
       throw new Error("Only " + config.DOMAIN + " company emails are allowed.");
 
+    // Validate role values
+    var allowedRoles = ['employee', 'admin', 'super admin', 'audit'];
+    if (allowedRoles.indexOf(role) === -1)
+      throw new Error("Invalid role. Allowed: employee, admin, audit, super admin.");
+
+    // Self-protection: never allow creating a second super admin through this
+    // path is fine (super admin only), but block creating an audit/employee as admin.
     var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SD.USERS);
     var data = sh.getDataRange().getValues();
     var dup = data.slice(1).find(function(r){ 
@@ -616,7 +728,7 @@ function adminCreateUser(token, name, email, password, department, role, gender)
     });
     if (dup) throw new Error("An account with this email already exists.");
 
-    _createUserRow(name, email, password, role, department, gender, "TRUE", "FALSE");
+    _createUserRow(name, email, password, role, effectiveDept, gender, "TRUE", "FALSE");
     return { success: true };
   } catch(e) {
     return { success: false, message: e.message };
@@ -666,6 +778,25 @@ function registerUser(name, email, password, department, gender) {
     if (String(password).length < 4)
       throw new Error("Password must be at least 4 characters.");
 
+    // ── BANNED EMAIL GUARD ──
+    // A banned email (blacklist entry or a user row already marked 'banned')
+    // must never be allowed to mint a fresh account. Redirect the applicant
+    // to the same ban page a banned login would hit.
+    var sh0  = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SD.USERS);
+    var rows0 = sh0.getDataRange().getValues();
+    var existing = rows0.slice(1).find(function(r){
+      return String(r[2] || "").toLowerCase().trim() === email;
+    });
+    if (existing && String(existing[9] || "").toLowerCase() === "banned") {
+      var _breason = String(existing[16] || "Your account has been suspended by an administrator.");
+      var _bby     = String(existing[17] || "Administrator");
+      throw new Error("__BANNED__::" + _breason + "::" + _bby);
+    }
+    var _bl = _checkBlacklistMatch(email, "", null);
+    if (_bl) {
+      throw new Error("__BANNED__::" + (_bl.reason || "This email has been blocked.") + "::" + (_bl.bannedBy || "Administrator"));
+    }
+
     lock.waitLock(15000);
 
     var sh   = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SD.USERS);
@@ -673,7 +804,12 @@ function registerUser(name, email, password, department, gender) {
     var dup  = data.slice(1).find(function(r){ 
       return String(r[2] || "").toLowerCase().trim() === String(email).toLowerCase().trim(); 
     });
-    if (dup) throw new Error("An account with this email already exists.");
+    if (dup) {
+      // Signal the frontend (with a machine-readable prefix) so it can route
+      // the applicant to the "email already in system → contact admin" page
+      // instead of a generic toast.
+      throw new Error("__EMAIL_EXISTS__::" + email);
+    }
 
     _createUserRow(name, email, password, SD.EMPLOYEE, department, gender);
     
@@ -742,6 +878,70 @@ function _clearLoginLock(email) {
 }
 
 /**
+ * Blacklist enforcement at LOGIN.
+ * Returns an active match { banned:true, matchedOn, reason, bannedBy } or null.
+ * Checks the SD_BLACKLIST sheet for:
+ *   - the exact email (or an "EMAIL:..." entry),
+ *   - the client IP (exact OR same /24 subnet = "similar" IP),
+ *   - the device fingerprint (best-effort: exact compositeHash or substring).
+ * This blocks a banned user even if they try a brand-new account from the
+ * same machine / same network.
+ * @param {string} email
+ * @param {string} clientIp
+ * @param {object} fingerprint
+ */
+function _checkBlacklistMatch(email, clientIp, fingerprint) {
+  try {
+    var sh = _blacklistSheet();
+    if (!sh || sh.getLastRow() < 2) return null;
+    var c = _blacklistCols();
+    var data = sh.getDataRange().getValues();
+    var normEmail = String(email || '').toLowerCase().trim();
+    var normIp = String(clientIp || '').trim();
+    var fpHash = (fingerprint && fingerprint.compositeHash) ? String(fingerprint.compositeHash) : '';
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      if (row[c.UNBANNED_AT]) continue; // unbanned -> ignore
+      var rowEmail = String(row[c.USER_EMAIL] || '').toLowerCase();
+      var rowIpRaw = String(row[c.IP] || '');
+      var rowFp = String(row[c.DEVICE_FINGERPRINT] || '');
+      var reason = String(row[c.REASON] || 'This account or device has been blocked.');
+      var bannedBy = String(row[c.BANNED_BY] || 'Administrator');
+
+      // EMAIL match (userEmail column, or "EMAIL:..." ip column)
+      if (normEmail) {
+        if (rowEmail === normEmail) return _blMatch('email', reason, bannedBy);
+        if (rowIpRaw.indexOf('EMAIL:') === 0 && rowIpRaw.slice(6).toLowerCase() === normEmail) {
+          return _blMatch('email', reason, bannedBy);
+        }
+      }
+
+      // IP match — exact OR same /24 subnet ("similar" IP)
+      if (normIp && normIp !== 'unknown' && rowIpRaw && rowIpRaw.indexOf('EMAIL:') !== 0) {
+        if (rowIpRaw === normIp) return _blMatch('ip', reason, bannedBy);
+        var a = normIp.split('.'), b = rowIpRaw.split('.');
+        if (a.length === 4 && b.length === 4 && a[0] === b[0] && a[1] === b[1] && a[2] === b[2]) {
+          return _blMatch('ip-subnet', reason, bannedBy);
+        }
+      }
+
+      // DEVICE/FP match (best-effort)
+      if (fpHash && rowFp && (rowFp === fpHash || rowFp.indexOf(fpHash) !== -1)) {
+        return _blMatch('device', reason, bannedBy);
+      }
+    }
+    return null;
+  } catch (e) {
+    console.warn('_checkBlacklistMatch error: ' + e.message);
+    return null; // fail open — never lock out valid users on a lookup error
+  }
+}
+
+function _blMatch(on, reason, bannedBy) {
+  return { banned: true, matchedOn: on, reason: reason, bannedBy: bannedBy };
+}
+
+/**
  * Log in.
  * @param {string} email
  * @param {string} password
@@ -767,6 +967,11 @@ function loginUser(email, password, clientIp, fingerprint) {
     };
     if (TEST_ACCOUNTS[email]) {
       var ta = TEST_ACCOUNTS[email];
+      // Blacklist check (IP / device / email) — block banned machines even for test accounts
+      var bl = _checkBlacklistMatch(email, clientIp, fingerprint);
+      if (bl) {
+        throw new Error("__BANNED__::" + bl.reason + "::" + bl.bannedBy);
+      }
       _recordLoginIp(email, clientIp || 'unknown', null, fingerprint);
       var token = _createSession(email, email.split('@')[0], ta.role, ta.dept);
       _clearLoginLock(email);
@@ -774,6 +979,16 @@ function loginUser(email, password, clientIp, fingerprint) {
     }
 
     if (!password) throw new Error("Password is required for this account.");
+
+    // ── BLACKLIST ENFORCEMENT AT LOGIN ──
+    // If this machine/IP/fingerprint is blacklisted, block the login outright
+    // even if the email itself is brand-new (banned users can't just switch
+    // accounts from the same device or same network). Reuses the same
+    // "__BANNED__::reason::by" signal the frontend already renders as a page.
+    var blMatch = _checkBlacklistMatch(email, clientIp, fingerprint);
+    if (blMatch) {
+      throw new Error("__BANNED__::" + blMatch.reason + "::" + blMatch.bannedBy);
+    }
 
     var sh   = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SD.USERS);
     var lastRow = sh.getLastRow();
@@ -784,7 +999,11 @@ function loginUser(email, password, clientIp, fingerprint) {
     for (var i = 0; i < data.length; i++) {
       var r = data[i];
       if (String(r[2] || "").toLowerCase().trim() !== email) continue;
-      if (r[9] === "banned") throw new Error("Your account has been suspended. Contact your admin.");
+      if (r[9] === "banned") {
+        var _banReason = String(r[16] || '');
+        var _bannedBy = String(r[17] || '');
+        throw new Error("__BANNED__::" + (_banReason || "Your account has been suspended by an administrator.") + "::" + (_bannedBy || "Administrator"));
+      }
       if (_hash(String(password), String(r[4])) !== String(r[3])) {
         _recordLoginFailure(email);
         throw new Error("Incorrect password.");
@@ -794,9 +1013,12 @@ function loginUser(email, password, clientIp, fingerprint) {
       _recordLoginIp(email, clientIp || 'unknown', i + 2, fingerprint);
       var token = _createSession(email, String(r[1]), String(r[5]), String(r[6]));
       _clearLoginLock(email);
+      // Lazily ensure the Audit department + audit admin exist (idempotent)
+      try { _seedAuditDepartment(); } catch (e) {}
       return {
         success: true, token: token, role: r[5], name: r[1], department: r[6],
-        gender: r[7], notes: r[8], allowMessages: r[12] === "TRUE", aiAutoAnswer: r[13] === "TRUE"
+        gender: r[7], notes: r[8], allowMessages: r[12] === "TRUE", aiAutoAnswer: r[13] === "TRUE",
+        deviceFingerprint: fingerprint || null
       };
     }
     _recordLoginFailure(email);
@@ -2454,6 +2676,52 @@ function savePATProject(token, data) {
             rowData[c.SUBMITTED_BY_DEPT]  = data.submittedByDept || existingData[i][c.SUBMITTED_BY_DEPT] || '';
             rowData[c.SUBMITTED_AT]       = data.submittedAt || existingData[i][c.SUBMITTED_AT] || now;
             rowData[c.WORKFLOW_HISTORY]   = data.workflowHistory ? JSON.stringify(data.workflowHistory) : existingData[i][c.WORKFLOW_HISTORY] || '[]';
+
+            // ── WIPE GUARD ──
+            // Never let an empty form value silently overwrite a non-empty DB
+            // column. If the form didn't supply BOQ/IMAGES/CHECKLIST/SNAGS/
+            // SIGNOFF (e.g. those sections weren't rendered or hadn't loaded
+            // yet), keep what's already persisted. This is what previously
+            // caused PATs to "clear for no reason" on edit.
+            var _dbBoq     = _safeParse(existingData[i][c.BOQ], []);
+            var _dbImages  = _safeParse(existingData[i][c.IMAGES], []);
+            var _dbCheck   = _safeParse(existingData[i][c.CHECKLIST], {});
+            var _dbSnags   = _safeParse(existingData[i][c.SNAGS], []);
+            var _dbSignoff = _safeParse(existingData[i][c.SIGNOFF], {});
+
+            // BOQ: keep DB unless the form actually sent a non-empty array.
+            if (data.boq && Array.isArray(data.boq) && data.boq.length > 0) {
+              rowData[c.BOQ] = _ensureJSONString(data.boq, []);
+            } else if (_dbBoq.length > 0) {
+              rowData[c.BOQ] = _ensureJSONString(_dbBoq, []);
+            }
+
+            // IMAGES: ALWAYS preserved from DB here — image add/remove is
+            // handled exclusively by savePATImages/deletePATImages so the form
+            // array must never be authoritative in a normal project save.
+            if (_dbImages.length > 0) {
+              rowData[c.IMAGES] = _ensureJSONString(_dbImages, []);
+            } else if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+              rowData[c.IMAGES] = _ensureJSONString(data.images, []);
+            }
+
+            // Checklist / Snags / Signoff: keep DB unless form sent non-empty.
+            if (data.checklist && (typeof data.checklist === 'object') && Object.keys(data.checklist).length > 0) {
+              rowData[c.CHECKLIST] = _ensureJSONString(data.checklist, {});
+            } else if (_dbCheck && Object.keys(_dbCheck).length > 0) {
+              rowData[c.CHECKLIST] = _ensureJSONString(_dbCheck, {});
+            }
+            if (data.snags && Array.isArray(data.snags) && data.snags.length > 0) {
+              rowData[c.SNAGS] = _ensureJSONString(data.snags, []);
+            } else if (_dbSnags.length > 0) {
+              rowData[c.SNAGS] = _ensureJSONString(_dbSnags, []);
+            }
+            if (data.signoff && (typeof data.signoff === 'object') && Object.keys(data.signoff).length > 0) {
+              rowData[c.SIGNOFF] = _ensureJSONString(data.signoff, {});
+            } else if (_dbSignoff && Object.keys(_dbSignoff).length > 0) {
+              rowData[c.SIGNOFF] = _ensureJSONString(_dbSignoff, {});
+            }
+
             sh.getRange(i + 1, 1, 1, rowData.length).setValues([rowData]);
             SpreadsheetApp.flush();
             // Audit: every edit is logged, cumulative
@@ -2691,18 +2959,34 @@ function submitVendorDecision(vendorToken, decision, comments) {
           sh.getRange(sheetRow, c.VENDOR_EVER_APPROVED + 1).setValue('TRUE');
         }
 
-        // When vendor rejects, add workflow history so the project team can take action
+        // When vendor rejects, push the PAT BACK so it cannot sit frozen at the
+        // vendor-entry stage. It returns to the PROJECT TEAM (the department
+        // that owns vendor engagement) — NOT to MEC. This mirrors the portal's
+        // internal rejection rule, where every department rejects back to the
+        // Project Team. The Project Team then reviews the vendor's reason and
+        // rejects back to MEC (status "Rejected") with their own comment.
         if (decision === 'rejected') {
+          // Vendor rejection returns the PAT to the PROJECT TEAM — the department
+          // that owns vendor engagement — NOT to MEC.
           var existingProject = _projectFromRow(data[i]);
+          var priorStatus = existingProject.workflowStatus || 'Awaiting Project Team';
           var history = existingProject.workflowHistory || [];
+          var vendorRejectComment = 'VENDOR REJECTED: ' + (comments || '');
           history.push({
-            fromStatus: existingProject.workflowStatus || 'Awaiting Project Team',
+            fromStatus: priorStatus,
             toStatus: 'Awaiting Project Team',
             by: { name: 'Vendor', email: existingProject.vendor || 'vendor', department: 'Vendor' },
-            comments: 'VENDOR REJECTED: ' + (comments || ''),
+            comments: vendorRejectComment,
             isRejection: true,
             timestamp: new Date().toISOString()
           });
+          // Return the PAT to the Project Team's inbox.
+          sh.getRange(sheetRow, c.WORKFLOW_STATUS + 1).setValue('Awaiting Project Team');
+          sh.getRange(sheetRow, c.ASSIGNED_TO_DEPT + 1).setValue('Project Team');
+          sh.getRange(sheetRow, c.ASSIGNED_TO_NAME + 1).setValue('');
+          sh.getRange(sheetRow, c.ASSIGNED_TO_EMAIL + 1).setValue('');
+          sh.getRange(sheetRow, c.VERDICT + 1).setValue('Rejected');
+          sh.getRange(sheetRow, c.REJECTION_REASON + 1).setValue(vendorRejectComment);
           sh.getRange(sheetRow, c.WORKFLOW_HISTORY + 1).setValue(JSON.stringify(history));
           sh.getRange(sheetRow, c.UPDATED_AT + 1).setValue(new Date().toISOString());
         }
@@ -3318,6 +3602,48 @@ function _deletePATDriveImages(projectId, data, foundRow) {
     return { success: false, deletedCount: 0, message: e.message };
   }
 }
+
+/**
+ * Delete ONE PAT Drive image (by URL) and its linked SD_DOCUMENTS row.
+ * Used by the reconcile logic in savePATImages so that a removed image is
+ * actually trashed from Drive and never "comes back" on the next save.
+ */
+function _deleteOnePATDriveImage(url, projectId) {
+  if (!url) return 0;
+  var deleted = 0;
+  // 1) Trash the Drive file (if the URL carries a file id)
+  var match = String(url).match(/[?&]id=([^&]+)/);
+  if (!match) match = String(url).match(/googleusercontent\.com\/d\/([^/?]+)/);
+  if (!match) match = String(url).match(/\/file\/d\/([^/?]+)/);
+  if (match) {
+    try {
+      var file = DriveApp.getFileById(match[1]);
+      file.setTrashed(true);
+      deleted++;
+    } catch (e) { console.warn('Could not trash PAT image: ' + e.message); }
+  }
+  // 2) Remove the matching Site Document row (image -> doc)
+  try {
+    var docSh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SD.DOCS);
+    if (docSh && docSh.getLastRow() >= 2) {
+      var c = _docCols();
+      var dData = docSh.getDataRange().getValues();
+      var key = String(projectId || '').toUpperCase().trim();
+      var normId = key.replace(/^(FOB|PAT)-/i, '');
+      for (var i = dData.length - 1; i >= 1; i--) {
+        var dPid = String(dData[i][1] || '').toUpperCase().trim();
+        var dUrl = String(dData[i][5] || '');
+        var isProject = (dPid === key || dPid === normId || ('PAT-' + dPid) === key);
+        if (isProject && (dUrl === url || (match && dUrl.indexOf(match[1]) !== -1))) {
+          docSh.deleteRow(i + 1);
+          break; // only one doc row per image
+        }
+      }
+    }
+  } catch (e) { console.warn('PAT image doc-row cleanup: ' + e.message); }
+  return deleted;
+}
+
 /**
  * Delete a single PAT project.
  * Also cascade-deletes linked JCC certificates, documents, and Drive files.
@@ -3345,18 +3671,34 @@ function deletePATProject(token, projectId) {
         break;
       }
     }
-    
+
     if (foundRow === -1) return { success: false, message: 'Project not found: ' + projectId };
+
+    // SAFETY: re-verify the row we are about to delete actually carries the
+    // requested ID. A stale read (e.g. an in-flight delete changing row indices,
+    // or an index-based lookup that drifted) must NEVER delete the wrong row.
+    var confirmedId = String(data[foundRow][0] || '').trim();
+    var confirmedNorm = confirmedId.toUpperCase();
+    var requestedNorm = searchId.toUpperCase();
+    var altNorm = altId.toUpperCase();
+    var isMatch = confirmedNorm === requestedNorm ||
+                  confirmedNorm === altNorm ||
+                  ('PAT-' + confirmedNorm) === requestedNorm ||
+                  confirmedNorm === ('PAT-' + requestedNorm.replace(/^PAT-/, ''));
+    if (!isMatch) {
+      return { success: false, message: 'Delete aborted: row/ID mismatch (got "' + confirmedId + '" for requested "' + projectId + '"). Possible concurrent edit — refresh and retry.' };
+    }
     
+    // STRICT delete policy (mirrors frontend button visibility):
+    //   - ONLY the MEC department (mec/mech) may delete a PAT.
+    //   - MEC may delete ONLY while the PAT is still in DRAFT.
+    //   - No other role (incl. Super Admin) and no other department may delete.
+    //   - Once a PAT leaves Draft, it can no longer be deleted (must be worked through).
     var canDelete = false;
-    var role = String(sess.role || '').toLowerCase();
     var dept = String(sess.department || '').toLowerCase();
-    if (role === 'super admin') {
-      canDelete = true;
-    } else if (dept === 'mec' || dept === 'mech') {
+    if (dept === 'mec' || dept === 'mech') {
       var status = (foundProject ? foundProject.workflowStatus : '') || '';
-      var isEditableStatus = ['Draft', 'Rejected', 'Awaiting Final MEC Review', 'Awaiting MEC Recheck'].indexOf(status) !== -1;
-      if (isEditableStatus) canDelete = true;
+      if (status === 'Draft') canDelete = true;
     }
     
     if (!canDelete) {
@@ -3393,8 +3735,11 @@ function deletePATProject(token, projectId) {
     // Cascade-delete Drive images from PAT project
     var imgResult = _deletePATDriveImages(String(data[foundRow][0] || projectId), data, foundRow);
     
-    // Delete the PAT project row itself
-    sh.deleteRow(foundRow + 1);
+    // Delete the PAT project row itself.
+    // IMPORTANT: `data` was read starting at spreadsheet ROW 2 (header is row 1),
+    // so the matched index `foundRow` corresponds to spreadsheet row `foundRow + 2`.
+    // Deleting the wrong offset would remove the wrong project — strictly prohibited.
+    sh.deleteRow(foundRow + 2);
     
     var msg = 'Project deleted.';
     var details = [];
@@ -3626,25 +3971,49 @@ function savePATImages(token, projectId, images) {
     }
     if (existingRowIdx === -1) return { success: false, message: 'Project not found.' };
 
-    // Start from the URLs ALREADY on the project (so a re-save never wipes them)
+    // Current persisted images (the authoritative source of truth).
     try { existingUrls = _safeParse(data[existingRowIdx][c.IMAGES], []); } catch (e) { existingUrls = []; }
     if (!Array.isArray(existingUrls)) existingUrls = [];
 
-    // SAFETY: if the frontend sends an empty array, that means "no new images
-    // were selected" — NOT "delete everything". Keep what's already there.
+    // Incoming: the desired full image set from the UI (URLs + any new base64
+    // uploads). When the UI removes an image, it simply omits that URL here.
     const incoming = (images && Array.isArray(images)) ? images.filter(s => typeof s === 'string' && s.length > 0) : [];
-    if (incoming.length === 0) {
-      return { success: true, images: existingUrls }; // nothing to change, preserve
+
+    // ── SAFETY: if BOTH the DB and the incoming set are empty, there is
+    // nothing to do — never wipe, never error. ──
+    if (existingUrls.length === 0 && incoming.length === 0) {
+      return { success: true, images: [] };
     }
 
-    let finalUrls = existingUrls.slice(); // merge mode, not overwrite
+    // ── GUARD against a spurious "clear everything" call: if the incoming set
+    // is empty but the project ALREADY has images, an empty save is almost
+    // always a UI race / unfinished load, NOT a deliberate wipe. Keep the
+    // existing images. Deliberate removal goes through deletePATImages() /
+    // the reconcile logic below (which only removes URLs the UI explicitly
+    // dropped). This stops PATs from clearing "for no reason" on a re-save. ──
+    if (incoming.length === 0 && existingUrls.length > 0) {
+      return { success: true, images: existingUrls };
+    }
 
-    // Process incoming images
-    for (let i = 0; i < incoming.length; i++) {
+    // ── RECONCILE ──
+    // 1) Remove (trash from Drive + delete doc row) any persisted image the
+    //    UI no longer includes. This is what makes "I delete from files and
+    //    save" actually delete, and stops removed images coming back.
+    const incomingSet = {};
+    incoming.forEach(s => { incomingSet[s] = true; });
+    existingUrls.forEach(url => {
+      if (!incomingSet[url]) {
+        try { _deleteOnePATDriveImage(url, projectId); } catch (e) { console.warn('reconcile trash: ' + e.message); }
+      }
+    });
+
+    // 2) Start from the incoming desired set, then upload any new base64.
+    let finalUrls = incoming.slice();
+
+    // Process incoming images (uploads are base64; existing links are kept).
+    for (let i = 0; i < finalUrls.length; i++) {
       if (finalUrls.length >= 4) break; // Hard limit of 4 images
-      const imgStr = incoming[i];
-      if (finalUrls.indexOf(imgStr) !== -1) continue; // Skip exact duplicates
-
+      const imgStr = finalUrls[i];
       if (imgStr.indexOf('data:image') === 0) {
         // New Upload: Convert base64 to Blob and save to Drive
         const parts = imgStr.split(',');
@@ -3653,18 +4022,21 @@ function savePATImages(token, projectId, images) {
         const blob = Utilities.newBlob(bytes, mime, "PAT_" + projectId + "_" + finalUrls.length);
         const file = folder.createFile(blob);
         const url = "https://lh3.googleusercontent.com/d/" + file.getId();
-        finalUrls.push(url);
+        finalUrls[i] = url; // replace the base64 with the stored URL
 
         // Also register this image as a SD_DOCUMENTS row (image -> doc)
         try {
           _appendImageDocRow(token, projectId, url, file.getId(), "PAT_" + projectId + "_" + finalUrls.length, mime, bytes.length);
         } catch (docErr) { console.warn('PAT bulk image doc-row: ' + docErr.message); }
 
-      } else {
-        // Existing link: keep as is
-        finalUrls.push(imgStr);
       }
+      // Existing link: keep as is (already a URL)
     }
+
+    // De-duplicate (defensive)
+    const seen = {};
+    finalUrls = finalUrls.filter(u => { if (seen[u]) return false; seen[u] = true; return true; });
+    if (finalUrls.length > 4) finalUrls = finalUrls.slice(0, 4);
 
     sh.getRange(existingRowIdx + 1, c.IMAGES + 1).setValue(JSON.stringify(finalUrls));
     return { success: true, images: finalUrls };
@@ -3692,7 +4064,13 @@ function deletePATImages(token, projectId) {
     for (let i = 1; i < data.length; i++) {
       const rowId = String(data[i][0]).toUpperCase().trim();
       if (rowId === targetId) {
-        // EXPLICIT delete only — never called from a normal save. Wipes confirmed removals.
+        // EXPLICIT delete — trash every Drive file + matching doc row, then
+        // clear the cell. Called only when the user deliberately removed all
+        // images (or individually deleted one via the UI -> save reconcile).
+        try {
+          const cur = _safeParse(data[i][c.IMAGES], []);
+          if (Array.isArray(cur)) cur.forEach(url => { try { _deleteOnePATDriveImage(url, projectId); } catch (e) {} });
+        } catch (e) { console.warn('deletePATImages cleanup: ' + e.message); }
         sh.getRange(i + 1, c.IMAGES + 1).setValue('[]');
         return { success: true };
       }
@@ -4112,7 +4490,11 @@ function getPublicDepartments() {
     var data = sh.getRange(2, 2, lastRow - 1, 1).getValues();
     var names = data.map(function(r){ return String(r[0]).trim(); })
                     .filter(Boolean).sort();
-    
+    // The Audit department is NOT a self-signup option. Accounts in Audit can
+    // only be created by a Super Admin via the admin console, so it is hidden
+    // from the public registration dropdown.
+    names = names.filter(function(n){ return String(n).toLowerCase() !== 'audit'; });
+
     cache.put("public_departments", JSON.stringify(names), 600); // Cache for 10 mins (better UX)
     return { success: true, data: names };
   } catch(e) {
@@ -4363,6 +4745,9 @@ function searchUsers(token, query) {
       if (!q) return true;
       return (u.name || '').toLowerCase().indexOf(q) !== -1 ||
              (u.email || '').toLowerCase().indexOf(q) !== -1;
+    }).filter(function(u) {
+      // Banned users must never appear as mail contacts / in search.
+      return String(u.status || '').toLowerCase() !== 'banned';
     });
     return { success: true, users: users };
   } catch(e) {
@@ -4380,9 +4765,9 @@ function getUserById(token, userId) {
     for (var i = 1; i < data.length; i++) {
       var rowId = String(data[i][0]).trim();
       if (rowId === searchId) {
-        var ipsRaw = data[i][14] || '';
+        var ipsRaw = data[i][14] || '';          // LoginIPs (col 15 / index 14) — JSON array
         var pwHash = data[i][13] || '';
-        var fingerprintsRaw = data[i][16] || '';
+        var fingerprintsRaw = data[i][15] || ''; // Fingerprints (col 16 / index 15) — JSON array
         var ips = [];
         var fingerprints = [];
         try { ips = ipsRaw ? JSON.parse(ipsRaw) : []; } catch(e) { ips = []; }
@@ -4395,6 +4780,8 @@ function getUserById(token, userId) {
           role: data[i][5],
           department: data[i][6],
           status: data[i][9],
+          banReason: String(data[i][16] || ''),
+          bannedBy: String(data[i][17] || ''),
           ips: ips,
           fingerprints: fingerprints
         };
@@ -4414,9 +4801,13 @@ function getUserById(token, userId) {
  */
 function updateUserRole(token, userId, newRole) {
   try {
-    _superAdminSession(token);
-    if (newRole !== SD.ADMIN && newRole !== SD.EMPLOYEE && newRole !== "super admin")
-      throw new Error("Role must be 'admin', 'employee', or 'super admin'.");
+    var sess = _superAdminSession(token);
+    if (newRole !== SD.ADMIN && newRole !== SD.EMPLOYEE && newRole !== "super admin" && newRole !== "audit")
+      throw new Error("Role must be 'admin', 'employee', 'audit', or 'super admin'.");
+    // Only super admin can grant the 'admin' role — no other path can mint admins.
+    if (newRole === SD.ADMIN) {
+      // already gated by _superAdminSession above; explicit note for clarity
+    }
 
     var ss      = SpreadsheetApp.getActiveSpreadsheet();
     var sh      = ss.getSheetByName(SD.USERS);
@@ -4428,7 +4819,17 @@ function updateUserRole(token, userId, newRole) {
       var rowId = String(data[i][0]).trim();
       var rowEmail = String(data[i][2]).toLowerCase().trim();
       if (rowId === searchId || (isEmailSearch && rowEmail === searchId.toLowerCase())) {
-        sh.getRange(i+1, 6).setValue(newRole);
+        var currentRole = String(data[i][5] || '').toLowerCase();
+        // ── SELF-ACCOUNT PROTECTION ──
+        // Super admin role cannot be removed/changed by anyone.
+        if (currentRole === 'super admin' && newRole !== 'super admin') {
+          return { success: false, message: "Super admin role is protected and cannot be changed." };
+        }
+        // When promoting to audit, align the department so the console recognises it.
+        if (newRole === 'audit') {
+          sh.getRange(i + 1, 7).setValue('Audit');
+        }
+        sh.getRange(i + 1, 6).setValue(newRole);
         return { success: true };
       }
     }
@@ -4444,15 +4845,65 @@ function updateUserRole(token, userId, newRole) {
  * @param {string} userId
  * @param {string} status  "active" | "banned"
  */
-function updateUserStatus(token, userId, status) {
+function updateUserStatus(token, userId, status, reason, bannedBy) {
+  // NOTE: Ban metadata lives in USERS columns 16 (BanReason) and 17 (BannedBy),
+  // immediately after the 15 declared headers (1-based).
+
   var lock = LockService.getScriptLock();
   try {
-    _superAdminSession(token);
-    var sh   = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SD.USERS);
+    var sess = _superAdminSession(token);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName(SD.USERS);
     var data = sh.getDataRange().getValues();
     for (var i = 1; i < data.length; i++) {
       if (data[i][0] === userId) {
-        sh.getRange(i+1, 10).setValue(status);
+        // ── SELF-ACCOUNT PROTECTION ──
+        // A super admin can NEVER be banned, by anyone (including another super admin).
+        var targetRole = String(data[i][5] || '').toLowerCase();
+        if (targetRole === 'super admin' && String(status).toLowerCase() === 'banned') {
+          lock.releaseLock();
+          return { success: false, message: "Super admin accounts are protected and cannot be banned." };
+        }
+        sh.getRange(i + 1, 10).setValue(status);
+        // Store ban reason (col 17 / index 16) and who banned (col 18 / index 17).
+        // NOTE: cols 15 (LoginIPs) and 16 (Fingerprints) are owned by _recordLoginIp.
+        if (String(status).toLowerCase() === 'banned') {
+          sh.getRange(i + 1, 17).setValue(String(reason || 'Account suspended by administrator.'));
+          sh.getRange(i + 1, 18).setValue(String(bannedBy || sess.email || 'Administrator'));
+          // ── FORCE LOGOUT ── kill every live session for this user immediately
+          try { _purgeUserSessions(String(data[i][2] || '')); } catch (e) {}
+        } else {
+          // Clear ban metadata on reactivation
+          sh.getRange(i + 1, 17).setValue('');
+          sh.getRange(i + 1, 18).setValue('');
+          // ── SYNC BLACKLIST ──
+          // A ban creates up to THREE blacklist rows per user: one per known IP,
+          // one per fingerprint, and a dedicated "EMAIL:<addr>" row — all sharing
+          // the user's email in col 3 (USER_EMAIL). If we only clear the USERS
+          // status here (which is what the Users-tab "Activate" button used to do),
+          // the IP/fingerprint blacklist rows survive, and login is STILL blocked
+          // by _checkBlacklistMatch even though the account is "active". That is
+          // the "cleared the blacklist but still banned" trap.
+          //
+          // So on reactivation we also stamp UNBANNED_AT on every active blacklist
+          // row tied to this email. This makes the Users-tab Activate button fully
+          // equivalent to unbanUserWithBlacklist, with no orphaned block rows.
+          try {
+            var _bsh = _blacklistSheet();
+            if (_bsh && _bsh.getLastRow() >= 2) {
+              var _bc = _blacklistCols();
+              var _bdata = _bsh.getDataRange().getValues();
+              var _uemail = String(data[i][2] || '').toLowerCase();
+              var _now = new Date().toISOString();
+              for (var _b = 1; _b < _bdata.length; _b++) {
+                if (_bdata[_b][_bc.UNBANNED_AT]) continue; // already inactive
+                if (String(_bdata[_b][_bc.USER_EMAIL] || '').toLowerCase() === _uemail) {
+                  _bsh.getRange(_b + 1, _bc.UNBANNED_AT + 1).setValue(_now);
+                }
+              }
+            }
+          } catch (e) { /* never block reactivation on a blacklist lookup hiccup */ }
+        }
         lock.releaseLock();
         return { success: true };
       }
@@ -4564,10 +5015,15 @@ function getDepartmentMembers(token) {
     if (lastRow < 2) return { success: true, members: [] };
     
     var data = sh.getRange(2, 1, lastRow - 1, sh.getLastColumn()).getValues();
+    var role = String(sess.role || "").toLowerCase();
+    // Only Super Admin sees the entire org. Everyone else (incl. admins)
+    // sees ONLY the people in their own department.
     var members = data.filter(function(r) {
-      var role = String(sess.role || "").toLowerCase();
-      if (role === 'admin' || role === 'super admin') return true;
+      if (role === 'super admin') return true;
       return String(r[6]) === sess.department;
+    }).filter(function(r) {
+      // Banned members must not surface in team/department views.
+      return String(r[9] || '').toLowerCase() !== 'banned';
     }).map(function(r) {
       return { name: r[1], email: r[2], role: String(r[5] || "").toLowerCase() };
     });
@@ -5187,7 +5643,25 @@ function sendMail(token, receiverEmail, subject, body, attachments, cc, bcc, lab
     // Remove CC recipients from primary receivers to avoid duplicates
     var ccSet = ccReceivers.join(',');
     primaryReceivers = primaryReceivers.filter(function(r) { return ccSet.indexOf(r) === -1; });
-    
+
+    // ── TEST ACCOUNTS: never deliver mail to the 4 department test logins ──
+    // (mec-test@, project-test@, planning-test@, sd-test@fob.ng). They are
+    // throwaway accounts; tagging them clutters their inboxes and confuses the
+    // sender's Sent view. Drop them silently and warn.
+    var TEST_ACCOUNTS = {
+      'mec-test@fob.ng': 1, 'project-test@fob.ng': 1,
+      'planning-test@fob.ng': 1, 'sd-test@fob.ng': 1
+    };
+    var skippedTest = 0;
+    primaryReceivers = primaryReceivers.filter(function(r) {
+      if (TEST_ACCOUNTS[r]) { skippedTest++; return false; }
+      return true;
+    });
+    ccReceivers = ccReceivers.filter(function(r) {
+      if (TEST_ACCOUNTS[r]) { skippedTest++; return false; }
+      return true;
+    });
+
     var receivers = primaryReceivers;
     if (receivers.length === 0) throw new Error("No valid recipient emails.");
 
@@ -5198,13 +5672,16 @@ function sendMail(token, receiverEmail, subject, body, attachments, cc, bcc, lab
     var now = new Date().toISOString();
     var attachmentsJson = JSON.stringify(attachments || []);
     var mailCount = 0;
-    
+
     // Build a batch array instead of calling appendRow per recipient
     var batchRows = [];
+    var skippedBanned = 0;
 
     receivers.forEach(function(receiverEmailNorm) {
       var receiver = userData.find(function(r) { return String(r[2]).toLowerCase().trim() === receiverEmailNorm; });
       if (!receiver) return; // skip invalid recipients silently
+      // BANNED RECIPIENT: never deliver mail to a banned account.
+      if (String(receiver[9] || '').toLowerCase() === 'banned') { skippedBanned++; return; }
       var receiverName = receiver[1];
       var isSelf = sess.email.toLowerCase().trim() === receiverEmailNorm;
       var senderFolder = isSelf ? 'Self' : 'Sent';
@@ -5221,6 +5698,7 @@ function sendMail(token, receiverEmail, subject, body, attachments, cc, bcc, lab
     ccReceivers.forEach(function(receiverEmailNorm) {
       var receiver = userData.find(function(r) { return String(r[2]).toLowerCase().trim() === receiverEmailNorm; });
       if (!receiver) return;
+      if (String(receiver[9] || '').toLowerCase() === 'banned') { skippedBanned++; return; }
       var receiverName = receiver[1];
       var isSelf = sess.email.toLowerCase().trim() === receiverEmailNorm;
       var senderFolder = isSelf ? 'Self' : 'Sent';
@@ -5233,6 +5711,39 @@ function sendMail(token, receiverEmail, subject, body, attachments, cc, bcc, lab
 
     if (mailCount === 0) throw new Error("No valid recipients found in system.");
     
+    // IDEMPOTENCY GUARD: block duplicate sends.
+    // A single send action can reach the backend more than once when a user
+    // double-clicks Send, presses Ctrl/Cmd+Enter then clicks, or the frontend
+    // retries/fires twice. Every duplicate produces extra copies in the sheet
+    // (the user saw one message appear 4x). We detect an identical in-flight
+    // send (same sender + recipients + subject + body + thread within 8s) and
+    // return the EXISTING mail instead of writing new rows.
+    var dupWindowMs = 8000;
+    var dupNow = new Date().getTime();
+    var allRecipientsKey = primaryReceivers.concat(ccReceivers).map(function(r){return r;}).sort().join(',');
+    var existingAll = sh.getDataRange().getValues();
+    for (var d = 1; d < existingAll.length; d++) {
+      var existingSender = String(existingAll[d][1] || '').toLowerCase().trim();
+      var existingSubject = String(existingAll[d][5] || '').toLowerCase().trim();
+      var existingBody = String(existingAll[d][6] || '').toLowerCase().trim();
+      var existingThread = String(existingAll[d][13] || '').trim();
+      var existingTs = existingAll[d][7] ? new Date(existingAll[d][7]).getTime() : 0;
+      // recipient set encoded in ReceiverEmail + CC columns
+      var existingRecipientsKey = [String(existingAll[d][3] || '').toLowerCase().trim()]
+        .concat(String(existingAll[d][15] || '').toLowerCase().split(',').map(function(x){return x.trim();}).filter(Boolean))
+        .sort().join(',');
+      var recipMatch = (existingRecipientsKey === allRecipientsKey) || (allRecipientsKey.length > 0 && existingRecipientsKey.indexOf(allRecipientsKey) !== -1);
+      if (existingSender === sess.email.toLowerCase().trim() &&
+          existingSubject === String(subject || '').toLowerCase().trim() &&
+          existingBody === String(body || '').toLowerCase().trim() &&
+          existingThread === threadIdNorm &&
+          recipMatch &&
+          existingTs > 0 && (dupNow - existingTs) <= dupWindowMs) {
+        // Duplicate send detected — return the already-written mail, do NOT write again.
+        return { success: true, mailId: existingAll[d][0], duplicate: true, attachments: attachments || [] };
+      }
+    }
+
     // BATCH WRITE: single API call instead of 2*N appendRow calls
     if (batchRows.length > 0) {
       var lastRow = sh.getLastRow();
@@ -5261,7 +5772,17 @@ function sendMail(token, receiverEmail, subject, body, attachments, cc, bcc, lab
       }
     }
 
-    return { success: true, mailId: mailId, attachments: attachments || [] };
+    var ret = { success: true, mailId: mailId, attachments: attachments || [] };
+    var warnParts = [];
+    if (skippedTest > 0) {
+      warnParts.push(skippedTest + ' test account(s) were skipped (MEC/PROJECT/PLANNING/SD-METRO test users are not real recipients).');
+    }
+    if (skippedBanned > 0) {
+      warnParts.push(skippedBanned + ' banned account(s) were skipped (mail is never delivered to banned users).');
+    }
+    if (warnParts.length > 0) ret.warning = warnParts.join(' ');
+
+    return ret;
   } catch(e) {
     return { success: false, message: e.message };
   }
@@ -5732,6 +6253,13 @@ function getAllMailCounts(token) {
       var isOwner = sender === email || receiver === email;
       if (!isOwner) continue;
 
+      // SOFT-DELETE FILTER: mirror getMails() — skip rows this user deleted,
+      // otherwise the badge keeps counting mails the user has already removed
+      // (so a deleted mail would still inflate Inbox/Sent after delete AND reload).
+      var deletedBy = String(r[17] || '').toLowerCase();
+      var deletedList = deletedBy ? deletedBy.split(',').map(function(e) { return e.trim(); }) : [];
+      if (deletedList.indexOf(email) !== -1) continue;
+
       if (mailFolder === 'Inbox' && receiver === email) counts.Inbox++;
       else if (mailFolder === 'Sent' && sender === email) counts.Sent++;
       else if (mailFolder === 'Self' && sender === email && sender === receiver) counts.Self++;
@@ -5747,6 +6275,123 @@ function getAllMailCounts(token) {
   }
 }
 
+/**
+ * ROLE-AWARE NOTIFICATION FEED (server-authoritative).
+ * Returns a list of pending notifications for the current user, computed from
+ * live data so the frontend never has to guess roles:
+ *   - mail: unread inbox mail addressed to this user
+ *   - pat: PAT projects whose current owner-department == this user's department
+ *          (i.e. a PAT just arrived in their queue), or awaiting their action
+ *   - audit (Audit dept / audit role): completed projects pending review,
+ *          plus any PAT currently in a review/owner stage
+ * Each item carries a stable id so the client can dedupe + schedule reminders.
+ * @param {string} token
+ * @param {string} sinceIso  (optional) only items updated after this timestamp
+ */
+function getMyNotifications(token, sinceIso) {
+  try {
+    var sess = _session(token);
+    var email = String(sess.email || '').toLowerCase();
+    var role = String(sess.role || '').toLowerCase();
+    var dept = String(sess.department || '').toLowerCase();
+    var isAudit = (role === 'audit' || dept === 'audit');
+    var isSuperAdmin = (role === 'super admin');
+    var out = [];
+
+    // ── MAIL: unread inbox addressed to this user ──
+    try {
+      var mailSh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SD.MAILS);
+      if (mailSh && mailSh.getLastRow() >= 2) {
+        var mdata = mailSh.getDataRange().getValues();
+        for (var i = 1; i < mdata.length; i++) {
+          var r = mdata[i];
+          var folder = String(r[9] || '');
+          var receiver = String(r[3] || '').toLowerCase();
+          var status = String(r[8] || '').toLowerCase();
+          var sender = String(r[1] || '');
+          if (folder === 'Inbox' && receiver === email && status === 'unread') {
+            var subj = String(r[6] || '(no subject)');
+            out.push({
+              id: 'mail:' + String(r[0] || i),
+              kind: 'mail',
+              title: 'New mail from ' + sender,
+              body: subj,
+              href: '#mail',
+              ts: String(r[10] || ''),
+              priority: 'normal'
+            });
+          }
+        }
+      }
+    } catch (e) { /* mail sheet optional */ }
+
+    // ── PAT: projects whose owner-department == this user's department ──
+    try {
+      var patRes = getPATProjects(token);
+      var projs = (patRes && patRes.projects) || [];
+      projs.forEach(function(p) {
+        var status = p.workflowStatus || 'Draft';
+        var owner = (PAT_OWNER_MAP[status] || '').toLowerCase();
+        var matchesDept = (owner === dept) ||
+          (owner === '__all__' && (dept !== 'mec' && !isSuperAdmin)) ||
+          (isSuperAdmin && false); // super admin sees via audit/summary, not personal queue
+        // Also match by explicit assignment
+        var assignedDept = String(p.assignedToDept || '').toLowerCase();
+        if (assignedDept && assignedDept === dept) matchesDept = true;
+
+        if (isAudit) {
+          // Audit console cares about COMPLETED projects (reviewable) + anything in review.
+          if (status === 'Completed') {
+            out.push({
+              id: 'pat:' + p.projectId,
+              kind: 'audit',
+              title: 'Project ready for audit: ' + p.projectName,
+              body: 'Completed PAT ' + p.projectId + ' is now available for compliance review.',
+              href: '#audit',
+              ts: String(p.updatedAt || ''),
+              createdAt: String(p.submittedAt || p.updatedAt || ''),
+              priority: 'high'
+            });
+          } else if (owner === dept || assignedDept === dept) {
+            out.push({
+              id: 'pat:' + p.projectId,
+              kind: 'pat',
+              title: 'PAT in your queue: ' + p.projectName,
+              body: p.projectId + ' is now at "' + status + '" — action may be required.',
+              href: '#pat-projects',
+              ts: String(p.updatedAt || ''),
+              createdAt: String(p.submittedAt || p.updatedAt || ''),
+              priority: 'normal'
+            });
+          }
+        } else if (matchesDept && status !== 'Completed' && status !== 'Draft') {
+          out.push({
+            id: 'pat:' + p.projectId,
+            kind: 'pat',
+            title: 'PAT moved to your department: ' + p.projectName,
+            body: p.projectId + ' is now at "' + status + '" (' + (STATUS_TO_DEPT[status] || status) + ').',
+            href: '#pat-projects',
+            ts: String(p.updatedAt || ''),
+            createdAt: String(p.submittedAt || p.updatedAt || ''),
+            priority: 'high'
+          });
+        }
+      });
+    } catch (e) { /* PAT sheet optional */ }
+
+    // Sort newest first
+    out.sort(function(a, b) {
+      var ta = a.ts ? new Date(a.ts).getTime() : 0;
+      var tb = b.ts ? new Date(b.ts).getTime() : 0;
+      return tb - ta;
+    });
+
+    return { success: true, notifications: out, role: role, department: dept, isAudit: isAudit };
+  } catch (e) {
+    return { success: false, message: e.message, notifications: [] };
+  }
+}
+
 function getMailThread(token, threadId) {
   try {
     if (!token) throw new Error("Authentication required.");
@@ -5757,9 +6402,17 @@ function getMailThread(token, threadId) {
     var data = sh.getDataRange().getValues();
     var header = data[0];
     var mails = [];
-    
+    // DEDUP: a single sent message is stored as TWO rows (receiver's Inbox copy +
+    // sender's Sent/Self copy) sharing the same mailId. Both rows carry the same
+    // threadId, so grouping by threadId alone would render every message TWICE in
+    // the thread timeline. Collapse to one row per unique mailId.
+    var seenMailIds = {};
+
     for (var i = 1; i < data.length; i++) {
       if (data[i][13] === threadId) {
+        var dupMid = data[i][0];
+        if (seenMailIds[dupMid]) continue; // skip the duplicate copy
+        seenMailIds[dupMid] = true;
         var att = [];
         try { att = JSON.parse(data[i][10] || '[]'); } catch(e) { att = []; }
         var labels = [];
@@ -5940,6 +6593,8 @@ function handleRequest(e) {
       case "createDashboardShareToken": result = createDashboardShareToken.apply(null, args); break;
       case "getSharedDashboard": result = getSharedDashboard.apply(null, args); break;
       case "getPATAnalyticsForIdris": result = getPATAnalyticsForIdris.apply(null, args); break;
+      case "getAuditAnalytics": result = getAuditAnalytics.apply(null, args); break;
+      case "getMyNotifications": result = getMyNotifications.apply(null, args); break;
       case "getMaterials": result = getMaterials.apply(null, args); break;
       case "addMaterial": result = addMaterial.apply(null, args); break;
       case "deleteMaterial": result = deleteMaterial.apply(null, args); break;
@@ -6036,6 +6691,11 @@ function doGet(e) {
     if (page === 'employee' || page === 'employee.html') page = 'admin';
     if (page === 'admin.html') page = 'admin';
     if (page === 'mail.html') page = 'mail';
+    if (page === 'audit.html') page = 'audit';
+    // Standalone ban page — serves without a session so banned users always land here.
+    if (page === 'ban' || page === 'ban.html') page = 'ban';
+    // Standalone "email already in the system" page — serves without a session.
+    if (page === 'email-exists' || page === 'email-exists.html') page = 'email-exists';
     
     var template = HtmlService.createTemplateFromFile(page);
     template.scriptUrl = ScriptApp.getService().getUrl();
@@ -6326,6 +6986,77 @@ function ui_wipeSystem() {
   }
 }
 
+/**
+ * Force-unban an account by email, fully clearing BOTH ban stores.
+ *
+ * A ban is recorded in two places:
+ *   1. The USERS sheet  — Status (col 10) = "banned", plus BanReason (17) / BannedBy (18).
+ *   2. The SD_BLACKLIST sheet — one or more rows (per IP, per fingerprint, and an
+ *      EMAIL: row), all sharing the user's email in col 3 (USER_EMAIL).
+ *
+ * Editing the sheet by hand reliably leaves ONE of those stores behind, so the
+ * account stays blocked (or blocks with a blank reason). This tool clears BOTH
+ * completely, so it is safe to use even when a manual edit left the account
+ * half-banned. Super-admin only.
+ */
+function ui_forceUnbanByEmail() {
+  var ui = SpreadsheetApp.getUi();
+  var email = ui.prompt("🔓 Force Unban by Email",
+    "Enter the exact email to fully unban (clears account ban + all blacklist rows):",
+    ui.ButtonSet.OK_CANCEL);
+  if (email.getSelectedButton() !== ui.Button.OK) return;
+  var addr = String(email.getResponseText() || '').trim().toLowerCase();
+  if (!addr || addr.indexOf('@') === -1) { ui.alert("No valid email entered."); return; }
+
+  var confirm = ui.alert("Confirm Force Unban",
+    "This will reactivate " + addr + " and clear EVERY active blacklist row for that email. Continue?",
+    ui.ButtonSet.YES_NO);
+  if (confirm !== ui.Button.YES) return;
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var now = new Date().toISOString();
+  var ush = ss.getSheetByName(SD.USERS);
+  var reactivated = 0;
+
+  if (ush && ush.getLastRow() >= 2) {
+    var udata = ush.getDataRange().getValues();
+    for (var i = 1; i < udata.length; i++) {
+      if (String(udata[i][2] || '').toLowerCase() === addr) {
+        if (String(udata[i][9] || '').toLowerCase() === 'banned') {
+          ush.getRange(i + 1, 10).setValue('active');   // Status
+          ush.getRange(i + 1, 17).setValue('');         // BanReason
+          ush.getRange(i + 1, 18).setValue('');         // BannedBy
+          reactivated++;
+        }
+      }
+    }
+  }
+
+  var blacklistCleared = 0;
+  var bsh = ss.getSheetByName(SD.BLACKLIST);
+  if (bsh && bsh.getLastRow() >= 2) {
+    var c = _blacklistCols();
+    var bdata = bsh.getDataRange().getValues();
+    for (var j = 1; j < bdata.length; j++) {
+      if (bdata[j][c.UNBANNED_AT]) continue;                 // already inactive
+      if (String(bdata[j][c.USER_EMAIL] || '').toLowerCase() === addr) {
+        bsh.getRange(j + 1, c.UNBANNED_AT + 1).setValue(now);
+        blacklistCleared++;
+      }
+    }
+  }
+
+  // Also kill any live sessions for the email so a stale token can't linger.
+  try { _purgeUserSessions(addr); } catch (e) {}
+
+  ui.alert("✅ Force Unban Complete",
+    "Email: " + addr + "\n" +
+    "Account reactivated: " + reactivated + "\n" +
+    "Blacklist rows cleared: " + blacklistCleared + "\n\n" +
+    "The account can now sign in normally.",
+    ui.ButtonSet.OK);
+}
+
 // ─────────────────────────────────────────────────────────────
 //  MISSING BACKEND FUNCTIONS — frontend calls these
 // ─────────────────────────────────────────────────────────────
@@ -6556,6 +7287,163 @@ function getPATAnalyticsForIdris(token, forceRefresh) {
     };
   } catch(e) {
     return { success: false, message: e.message, analytics: { total: 0, byStatus: {}, projects: [], workflowEfficiency: { completionRate: "0%", averageCompletionTime: "N/A", rejectionRate: "0%" } } };
+  }
+}
+
+/**
+ * AUDIT CONSOLE — Analytics over COMPLETED PAT projects.
+ * Restricted to the Audit department and admins.
+ * Returns the full list of completed projects (with BOQ/snags/JCC flags)
+ * plus aggregated material and workflow analytics for the audit dashboard.
+ * @param {string} token
+ */
+function getAuditAnalytics(token) {
+  try {
+    var sess = _session(token);
+    var role = String(sess.role || '').toLowerCase();
+    var dept = String(sess.department || '').toLowerCase();
+    if (!(role === 'admin' || role === 'super admin' || dept === 'audit')) {
+      throw new Error('Audit access required. This console is restricted to the Audit department.');
+    }
+
+    var all = getPATProjects('').projects || [];
+    var completed = all.filter(function(p) { return (p.workflowStatus || '') === 'Completed'; });
+
+    // Build a lookup of generated JCC certificates by normalized project id
+    var jccMap = {};
+    try {
+      var jccRes = getAllJCCs();
+      (jccRes.jccs || []).forEach(function(j) {
+        var key = String(j.projectId || '').toUpperCase().replace(/^(FOB|PAT)-/, '');
+        jccMap[key] = j;
+      });
+    } catch (e) { /* JCC sheet may be empty */ }
+
+    // Aggregation buckets
+    var usedMap = {};    // desc -> { projectCount, totalScope, totalInstalled }
+    var insuffMap = {};  // desc -> { occurrences, totalShort }
+    var returnMap = {};  // desc -> { occurrences, totalLeftover }
+
+    var verdictDist = {};
+    var deptCounts = {};
+    var snagByDept = {};
+    var orchMap = {};
+    var vendorSet = {};
+    var totalSnags = 0, snagScoreSum = 0, jccCount = 0;
+    var materialWasteTotal = 0, insufficientTotal = 0;
+
+    var projectRows = completed.map(function(p) {
+      var boq = p.boq || [];
+      boq.forEach(function(b) {
+        var desc = String(b.desc || '').trim();
+        if (!desc) return;
+        var scope = Number(b.scope) || 0;
+        var installed = Number(b.installed) || 0;
+        var variance = Number(b.variance);
+        if (isNaN(variance)) variance = scope - installed;
+
+        if (!usedMap[desc]) usedMap[desc] = { projectCount: 0, totalScope: 0, totalInstalled: 0 };
+        usedMap[desc].projectCount++;
+        usedMap[desc].totalScope += scope;
+        usedMap[desc].totalInstalled += installed;
+
+        if (variance < 0) {
+          if (!insuffMap[desc]) insuffMap[desc] = { occurrences: 0, totalShort: 0 };
+          insuffMap[desc].occurrences++;
+          insuffMap[desc].totalShort += Math.abs(variance);
+        } else if (variance > 0) {
+          if (!returnMap[desc]) returnMap[desc] = { occurrences: 0, totalLeftover: 0 };
+          returnMap[desc].occurrences++;
+          returnMap[desc].totalLeftover += variance;
+        }
+      });
+
+      var v = String(p.verdict || 'Pending');
+      verdictDist[v] = (verdictDist[v] || 0) + 1;
+
+      var dp = String(p.department || p.assignedToDept || '').trim() || 'Unknown';
+      deptCounts[dp] = (deptCounts[dp] || 0) + 1;
+
+      var orch = String(p.orchestrator || '').trim();
+      if (orch) orchMap[orch] = (orchMap[orch] || 0) + 1;
+
+      var vd = String(p.vendor || '').trim();
+      if (vd) vendorSet[vd] = true;
+
+      var snags = p.snags || [];
+      totalSnags += snags.length;
+      snagScoreSum += (Number(p.snagScore) || 0);
+      snags.forEach(function(s) {
+        var sd = String(s.department || 'Unknown').trim() || 'Unknown';
+        snagByDept[sd] = (snagByDept[sd] || 0) + 1;
+      });
+
+      var normId = String(p.projectId || '').toUpperCase().replace(/^(FOB|PAT)-/, '');
+      var jcc = jccMap[normId];
+      if (jcc) jccCount++;
+
+      return {
+        projectId:        p.projectId,
+        projectName:      p.projectName,
+        vendor:           p.vendor,
+        inspectionDate:   p.inspectionDate,
+        siteAddress:      p.siteAddress,
+        verdict:          p.verdict,
+        snagScore:        Number(p.snagScore) || 0,
+        orchestrator:     p.orchestrator,
+        department:       p.department || p.assignedToDept,
+        presidingOfficer: p.presidingOfficer,
+        boq:              boq,
+        snags:            snags,
+        hasJCC:           !!jcc,
+        jccId:            jcc ? jcc.jccId : '',
+        certificateId:    jcc ? jcc.certificateId : '',
+        workflowStatus:   p.workflowStatus
+      };
+    });
+
+    var mostUsed = Object.keys(usedMap).map(function(d) {
+      return { desc: d, projectCount: usedMap[d].projectCount, totalScope: usedMap[d].totalScope, totalInstalled: usedMap[d].totalInstalled };
+    }).sort(function(a, b) { return b.totalScope - a.totalScope; }).slice(0, 12);
+
+    var insufficient = Object.keys(insuffMap).map(function(d) {
+      return { desc: d, occurrences: insuffMap[d].occurrences, totalShort: insuffMap[d].totalShort };
+    }).sort(function(a, b) { return b.totalShort - a.totalShort; });
+
+    var returned = Object.keys(returnMap).map(function(d) {
+      return { desc: d, occurrences: returnMap[d].occurrences, totalLeftover: returnMap[d].totalLeftover };
+    }).sort(function(a, b) { return b.totalLeftover - a.totalLeftover; });
+
+    Object.keys(insuffMap).forEach(function(d) { insufficientTotal += insuffMap[d].totalShort; });
+    Object.keys(returnMap).forEach(function(d) { materialWasteTotal += returnMap[d].totalLeftover; });
+
+    var topOrchestrators = Object.keys(orchMap).map(function(d) { return { name: d, count: orchMap[d] }; })
+      .sort(function(a, b) { return b.count - a.count; }).slice(0, 8);
+
+    var avgSnagScore = completed.length ? Math.round((snagScoreSum / completed.length) * 10) / 10 : 0;
+
+    return {
+      success: true,
+      completedProjects: projectRows,
+      analytics: {
+        totalCompleted:    completed.length,
+        totalVendors:      Object.keys(vendorSet).length,
+        totalSnags:        totalSnags,
+        avgSnagScore:      avgSnagScore,
+        mostUsedMaterials: mostUsed,
+        insufficientMaterials: insufficient,
+        returnedMaterials: returned,
+        verdictDistribution: verdictDist,
+        departmentCounts:  deptCounts,
+        snagsByDepartment: snagByDept,
+        topOrchestrators:  topOrchestrators,
+        jccGenerated:      jccCount,
+        materialWasteTotal: materialWasteTotal,
+        insufficientTotal:  insufficientTotal
+      }
+    };
+  } catch (e) {
+    return { success: false, message: e.message, completedProjects: [], analytics: null };
   }
 }
 
@@ -6794,11 +7682,20 @@ function getBlacklist(token) {
 
 function banUserWithBlacklist(token, userId, reason) {
   try {
-    _adminSession(token);
+    var sess = _adminSession(token);
     
     // Get user info and their known IPs/fingerprints
     var user = getUserById(token, userId);
     if (!user.success) return { success: false, message: 'User not found: ' + user.message };
+    
+    // Self-account protection: super admins cannot be banned.
+    if (String(user.role || '').toLowerCase() === 'super admin') {
+      return { success: false, message: 'Super admin accounts are protected and cannot be banned.' };
+    }
+    
+    // Apply the ban status + persist reason/who-banned (peak-security audit trail)
+    var statusRes = updateUserStatus(token, userId, 'banned', reason, sess.email);
+    if (!statusRes.success) return statusRes;
     
     var sh = _blacklistSheet();
     var c = _blacklistCols();
@@ -6833,12 +7730,14 @@ function banUserWithBlacklist(token, userId, reason) {
 
 function unbanUserWithBlacklist(token, userId) {
   try {
-    _adminSession(token);
+    var sess = _adminSession(token);
     
-    // Get user email from userId
+    // Get user email + role from userId
     var user = getUserById(token, userId);
     if (!user.success) return { success: false, message: 'User not found: ' + user.message };
-    
+    // Reactivate the user in the USERS sheet and clear ban metadata.
+    updateUserStatus(token, userId, 'active', '', sess.email);
+
     var userEmail = user.email || '';
     var sh = _blacklistSheet();
     if (sh.getLastRow() < 2) return { success: true, message: 'No blacklist entries found.' };
@@ -6871,12 +7770,53 @@ function removeBlacklistEntry(token, entryId) {
     var c = _blacklistCols();
     var data = sh.getDataRange().getValues();
 
+    var affectedEmails = [];
+    var stampedRows = [];
     for (var i = data.length - 1; i >= 1; i--) {
       if (String(data[i][c.ENTRY_ID] || '') === String(entryId)) {
+        var em = String(data[i][c.USER_EMAIL] || '').toLowerCase();
+        if (em && affectedEmails.indexOf(em) === -1) affectedEmails.push(em);
         sh.getRange(i + 1, c.UNBANNED_AT + 1).setValue(new Date().toISOString());
+        stampedRows.push(i);
       }
     }
-    return { success: true };
+
+    // ── SYNC ACCOUNT BAN ──
+    // The blacklist and the USERS "banned" status are two faces of the same
+    // block. The login/signup guards check BOTH (USERS status at cols 10/17/18
+    // and the blacklist via _checkBlacklistMatch). If we only stamp
+    // UNBANNED_AT here, a user whose account was banned (USERS status="banned",
+    // bannedBy populated) stays blocked forever even after the blacklist row is
+    // gone — they keep hitting "__BANNED__::...::<bannedBy>".
+    //
+    // So: only if NO OTHER active blacklist row still references the email do
+    // we lift the account-level ban and clear its ban metadata in USERS. This
+    // keeps removal consistent — removing one of several entries for an account
+    // does not falsely "unban" an account that is still otherwise blocklisted.
+    var stillBanned = {};
+    for (var k = 1; k < data.length; k++) {
+      if (stampedRows.indexOf(k) !== -1) continue;       // just unbanned above
+      if (data[k][c.UNBANNED_AT]) continue;              // already inactive
+      var rem = String(data[k][c.USER_EMAIL] || '').toLowerCase();
+      if (rem) stillBanned[rem] = true;
+    }
+    var fullyClear = affectedEmails.filter(function(e) { return !stillBanned[e]; });
+
+    var reactivated = 0;
+    if (fullyClear.length) {
+      var ush = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SD.USERS);
+      var udata = ush.getDataRange().getValues();
+      for (var j = 1; j < udata.length; j++) {
+        var uemail = String(udata[j][2] || '').toLowerCase();
+        if (fullyClear.indexOf(uemail) !== -1 && String(udata[j][9] || '').toLowerCase() === 'banned') {
+          ush.getRange(j + 1, 10).setValue('active');   // clear status
+          ush.getRange(j + 1, 17).setValue('');         // clear BanReason
+          ush.getRange(j + 1, 18).setValue('');         // clear BannedBy
+          reactivated++;
+        }
+      }
+    }
+    return { success: true, reactivated: reactivated };
   } catch(e) {
     return { success: false, message: e.message };
   }
@@ -6930,7 +7870,8 @@ function authorizeAICommand(token, commandType) {
     var READ_ONLY = ['OPEN_PAT', 'LOAD_PAT_PROJECT', 'FILL_PAT_FORM', 'SAVE_PAT',
                      'LIST_PAT_PROJECTS', 'GET_PAT_STATUS', 'GET_USER_BY_EMAIL',
                      'REFRESH_SYSTEM_DATA', 'SYNC_ALL_SYSTEM_DATA', 'FETCH_MAILS',
-                     'GET_SHARED_DASHBOARD', 'EXPORT_PAT_PDF', 'GET_BLACKLIST', 'GET_USER_BY_ID'];
+                     'GET_SHARED_DASHBOARD', 'EXPORT_PAT_PDF', 'GET_BLACKLIST', 'GET_USER_BY_ID',
+                     'GET_AUDIT_ANALYTICS', 'GET_MY_NOTIFICATIONS'];
     if (READ_ONLY.indexOf(commandType) !== -1) {
       return { allowed: true, role: role, message: 'Authorized.' };
     }

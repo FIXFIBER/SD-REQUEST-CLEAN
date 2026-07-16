@@ -1,0 +1,66 @@
+name: Auto-Fix PR
+
+# Runs entirely on GitHub's servers — zero load on your machine.
+# On every PR (and manual runs): syntax-checks all JS, sanity-checks HTML,
+# auto-formats with Prettier, and commits fixes straight back to the PR branch.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # allow committing fixes back to the PR branch
+
+jobs:
+  autofix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Syntax-check every JS / GAS file (hard fail on real errors)
+        run: |
+          set -e
+          fail=0
+          # GAS globals so Code.js doesn't false-fail on Apps Script symbols
+          for f in $(git ls-files '*.js' '*.gs'); do
+            if node --check "$f" 2>/tmp/err; then
+              echo "ok   $f"
+            else
+              echo "FAIL $f"; cat /tmp/err; fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Sanity-check HTML (balanced script/style tags)
+        run: |
+          for f in $(git ls-files '*.html'); do
+            o=$(grep -oc '<script' "$f" || true); c=$(grep -oc '</script>' "$f" || true)
+            if [ "$o" != "$c" ]; then echo "WARN $f: <script> $o vs </script> $c"; fi
+          done
+          echo "html scan done"
+
+      - name: Auto-format with Prettier
+        run: npx --yes prettier@3 --write "**/*.{js,html,css,json}" --ignore-path .gitignore || true
+
+      - name: Commit fixes back to PR
+        run: |
+          git config user.name "autofix-bot"
+          git config user.email "autofix@users.noreply.github.com"
+          if ! git diff --quiet; then
+            git add -A
+            git commit -m "style: auto-format via CI [skip ci]"
+            git push
+            echo "Pushed auto-fixes to ${{ github.head_ref }}"
+          else
+            echo "Nothing to fix — clean."
+          fi

@@ -180,7 +180,7 @@
     }
 
     .tab {
-      display: flex;
+      display: none;
       align-items: center;
       gap: 6px;
       padding: 7px 14px;
@@ -192,6 +192,12 @@
       cursor: pointer;
       font-weight: 450;
       transition: all 0.2s
+    }
+
+    /* Only show tabs that are NOT marked hidden (reveal-by-role after session check).
+       The `hidden` attribute is the authoritative gate; CSS must not force display. */
+    .tab:not([hidden]) {
+      display: flex;
     }
 
     .tab:hover {
@@ -361,6 +367,48 @@
 
     .modal-animate {
       animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* ── Notification Center ── */
+    #notif-dropdown { display: none; }
+    #notif-dropdown.active { display: block; }
+    .notif-item {
+      display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px;
+      cursor: pointer; transition: background .15s; align-items: flex-start;
+      border-left: 3px solid transparent;
+    }
+    .notif-item:hover { background: #f8fafc; }
+    .notif-item.unread { background: #f0f7ff; border-left-color: #1a3faa; }
+    .notif-item.reminder { background: #fffbeb; border-left-color: #f59e0b; }
+    .notif-ico {
+      width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff;
+    }
+    .notif-ico.mail { background: #1a3faa; }
+    .notif-ico.pat { background: #16a34a; }
+    .notif-ico.audit { background: #7c3aed; }
+    .notif-ico.reminder { background: #f59e0b; }
+    .notif-body { flex: 1; min-width: 0; }
+    .notif-title { font-size: 12.5px; font-weight: 600; color: #0d1526; line-height: 1.3; }
+    .notif-text { font-size: 11.5px; color: #64748b; margin-top: 2px; line-height: 1.35;
+      overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .notif-meta { font-size: 10px; color: #94a3b8; margin-top: 4px; display: flex; gap: 8px; align-items: center; }
+    .notif-dot { width: 7px; height: 7px; border-radius: 50%; background: #1a3faa; flex-shrink: 0; }
+    .notif-item.read .notif-dot { background: #cbd5e1; }
+    .notif-bell-ring { animation: bellRing .7s ease-in-out; }
+    @keyframes bellRing {
+      0%,100% { transform: rotate(0); }
+      20% { transform: rotate(14deg); } 40% { transform: rotate(-12deg); }
+      60% { transform: rotate(8deg); } 80% { transform: rotate(-5deg); }
+    }
+    @keyframes notifPop {
+      from { transform: scale(0.6); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .notif-item.new { animation: notifPop .35s cubic-bezier(0.16, 1, 0.3, 1); }
+
+    @media (max-width: 600px) {
+      #notif-dropdown { width: 320px; right: -10px; }
     }
 
     @keyframes modalFadeIn {
@@ -1434,10 +1482,11 @@
 
     .mail-detail-container {
       flex: 2;
+      min-height: 0;
       background: #fff;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      overflow-y: auto;
     }
 
     .mail-detail-empty {
@@ -1482,9 +1531,8 @@
     .mail-btn-delete:hover { background: #fef2f2 !important; color: #dc2626 !important; }
 
     .mail-detail-body {
-      flex: 1;
+      flex: 0 0 auto;
       padding: 24px;
-      overflow-y: auto;
       line-height: 1.6;
       color: #334155;
       font-size: 15px;
@@ -2391,6 +2439,21 @@
       <div class="nav-links">
         <a class="nav-link active"><i class="ti ti-layout-dashboard" aria-hidden="true"></i> Dashboard</a>
       </div>
+      <div class="nav-right" id="notif-trigger" style="position:relative; cursor:pointer; margin-right:10px" title="Notifications">
+        <div class="nav-icon-btn"><i class="ti ti-bell" aria-hidden="true"></i></div>
+        <span id="notif-badge" style="position:absolute; top:-4px; right:-4px; min-width:18px; height:18px; padding:0 4px; border-radius:999px; background:#dc2626; color:#fff; font-size:10px; font-weight:700; display:none; align-items:center; justify-content:center; box-shadow:0 0 0 2px #fff">0</span>
+        <div id="notif-dropdown" class="profile-dropdown" style="width:340px; right:0; left:auto; padding:0">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid #e2e4e9">
+            <div style="font-weight:700; font-size:13px; color:#0d1526">Notifications</div>
+            <div style="display:flex; gap:8px; align-items:center">
+              <button id="notif-enable-btn" type="button" onclick="enableNotificationSound()" style="background:#1a3faa; color:#fff; border:none; font-size:10px; padding:4px 8px; border-radius:6px; cursor:pointer">Enable alerts</button>
+              <button type="button" onclick="markAllNotificationsRead()" style="background:#f1f5f9; color:#475569; border:none; font-size:10px; padding:4px 8px; border-radius:6px; cursor:pointer">Mark all read</button>
+            </div>
+          </div>
+          <div id="notif-list" style="max-height:380px; overflow-y:auto; padding:6px"></div>
+          <div id="notif-empty" style="padding:30px 14px; text-align:center; color:#8a90a0; font-size:12px">You're all caught up.</div>
+        </div>
+      </div>
       <div class="nav-right" id="profile-trigger" style="position:relative; cursor:pointer" title="Account Settings">
         <div class="nav-icon-btn"><i class="ti ti-shield" aria-hidden="true"></i></div>
         <div class="avatar" id="nav-avatar">??</div>
@@ -2429,17 +2492,17 @@
 
       <div class="tab-bar">
         <div class="tab active" data-target="sd-ai"><i class="ti ti-message" aria-hidden="true"></i> SD Assistant</div>
-        <div class="tab" data-target="departments"><i class="ti ti-building" aria-hidden="true"></i> Departments</div>
-        <div class="tab" data-target="our-team"><i class="ti ti-users" aria-hidden="true"></i> Our Team</div>
-        <div class="tab" data-target="users"><i class="ti ti-users" aria-hidden="true"></i> Users</div>
+        <div class="tab" data-target="departments" hidden><i class="ti ti-building" aria-hidden="true"></i> Departments</div>
+        <div class="tab" data-target="our-team" hidden><i class="ti ti-users" aria-hidden="true"></i> Our Team</div>
+        <div class="tab" data-target="users" hidden><i class="ti ti-users" aria-hidden="true"></i> Users</div>
         <div class="tab" data-target="pat-projects">
           <i class="ti ti-clipboard-check"></i> PAT Projects
         </div>
         <div class="tab" data-target="mail"><i class="ti ti-mail"></i> Mail</div>
         <div class="tab" data-target="settings" style="display:none;"><i class="ti ti-settings"></i> Settings</div>
-        <div class="tab" data-target="blacklist"><i class="ti ti-shield-off"></i> Blacklist</div>
-        <div class="tab" data-target="sla"><i class="ti ti-clock-hour-4"></i> SLA Tracker</div>
-        <div class="tab" data-target="performance"><i class="ti ti-trophy"></i> Performance</div>
+        <div class="tab" data-target="blacklist" hidden><i class="ti ti-shield-off"></i> Blacklist</div>
+        <div class="tab" data-target="sla" hidden><i class="ti ti-clock-hour-4"></i> SLA Tracker</div>
+        <div class="tab" data-target="performance" hidden><i class="ti ti-trophy"></i> Performance</div>
 
       </div>
 
@@ -2895,6 +2958,66 @@
             <div style="font-size:12px;color:#64748b;margin-bottom:12px">All BOQ material options used across PAT projects. Add or remove materials here — they appear in the Material dropdown for every PAT.</div>
             <button type="button" onclick="openMaterialsManager()" style="background:#1a3faa;color:#fff;border:none;padding:10px 18px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px"><i class="ti ti-box"></i> Manage Materials</button>
           </div>
+
+          <!-- SUPER ADMIN ONLY: User Management -->
+          <div id="superadmin-usermgmt-section" class="section-card" style="max-width: 600px;margin-top:24px;display:none">
+            <div class="section-title">User Management <span style="font-size:11px;color:#b45309;background:#fef3c7;padding:2px 8px;border-radius:999px;margin-left:6px">Super Admin</span></div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:14px">Create accounts (including Audit department) and reset any user's password. This section is only visible to Super Admin.</div>
+
+            <div style="font-weight:600;font-size:13px;margin-bottom:8px;color:#0d1526">Create New Account</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+              <div class="form-group" style="margin:0">
+                <label class="form-label" style="font-size:11px">Full Name</label>
+                <input type="text" id="sa-name" class="form-input" placeholder="Jane Doe">
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label" style="font-size:11px">Email (@fob.ng)</label>
+                <input type="email" id="sa-email" class="form-input" placeholder="user@fob.ng">
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+              <div class="form-group" style="margin:0">
+                <label class="form-label" style="font-size:11px">Password</label>
+                <input type="text" id="sa-password" class="form-input" placeholder="Min 4 chars">
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label" style="font-size:11px">Department</label>
+                <select id="sa-dept" class="form-input">
+                  <option value="Audit">Audit</option>
+                  <option value="Store">Store</option>
+                  <option value="MEC">MEC</option>
+                  <option value="Project Team">Project Team</option>
+                  <option value="Planning Team">Planning Team</option>
+                  <option value="Service Delivery / Metro">Service Delivery / Metro</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label" style="font-size:11px">Role</label>
+                <select id="sa-role" class="form-input">
+                  <option value="employee">Employee</option>
+                  <option value="audit">Audit</option>
+                  <option value="store">Store</option>
+                  <option value="admin">Admin</option>
+                  <option value="super admin">Super Admin</option>
+                </select>
+              </div>
+            </div>
+            <button type="button" onclick="superAdminCreateUser()" style="background:#16a34a;color:#fff;border:none;padding:9px 16px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600">Create Account</button>
+
+            <div style="border-top:1px solid #e2e4e9;margin:18px 0 14px"></div>
+            <div style="font-weight:600;font-size:13px;margin-bottom:8px;color:#0d1526">Reset User Password</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end">
+              <div class="form-group" style="margin:0">
+                <label class="form-label" style="font-size:11px">User Email</label>
+                <input type="email" id="sa-reset-email" class="form-input" placeholder="user@fob.ng">
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label" style="font-size:11px">New Password</label>
+                <input type="text" id="sa-reset-pass" class="form-input" placeholder="Min 4 chars">
+              </div>
+              <button type="button" onclick="superAdminResetPassword()" style="background:#dc2626;color:#fff;border:none;padding:9px 16px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600">Reset</button>
+            </div>
+          </div>
           <div id="developer-settings-section" style="margin-top:24px;padding-top:20px;border-top:1px solid #e2e4e9;display:none">
             <div class="section-title" style="margin-bottom:8px">Developer Settings</div>
             <div style="font-size:12px;color:#64748b;margin-bottom:12px">Allow localhost connections for development testing.</div>
@@ -3157,6 +3280,8 @@
                 <i class="ti ti-arrow-back-up" style="font-size:12px"></i> Reset
               </button>
             </div>
+            <!-- Similar-PAT detector (hidden until a possible duplicate is found) -->
+            <div id="pat-similarity-banner" style="display:none;margin-bottom:14px;padding:12px 14px;border-radius:10px;border:1px solid #fcd34d;background:#fffbeb;font-size:12px;color:#7c2d12"></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
               <div class="form-group" style="margin:0">
                 <label class="form-label">Project Name *</label>
@@ -3418,6 +3543,8 @@
 
     tabs.forEach(tab => {
       tab.addEventListener('click', () => {
+        // Defense-in-depth: never activate a tab the current role isn't allowed to see.
+        if (tab.hasAttribute('hidden')) return;
         const target = tab.getAttribute('data-target');
 
         // Update Active Tab
@@ -3480,6 +3607,13 @@
       });
     }
 
+    function refreshMailCounts() {
+      // Lightweight badge refresh — no list reload, no full page reload.
+      gasCall('getAllMailCounts', [], function(r) {
+        if (r.success && r.counts) updateAllMailCounts(r.counts);
+      }, function() {});
+    }
+
     function updateAllMailCounts(counts) {
       var folders = ['Inbox', 'Sent', 'Self', 'Trash', 'Starred', 'Archive'];
       folders.forEach(function(folder) {
@@ -3521,26 +3655,29 @@
         return;
       }
 
-      // Group mails by threadId for conversation threading
-      var threadMap = {};
+      // Group mails: by threadId when present, otherwise by mailId.
+      // This collapses multi-recipient sends (one Sent row per send, not per
+      // recipient) and collapses threaded conversations.
+      var groupMap = {};
       var singles = [];
       mails.forEach(function(m) {
-        if (m.threadId) {
-          if (!threadMap[m.threadId]) threadMap[m.threadId] = [];
-          threadMap[m.threadId].push(m);
-        } else {
-          singles.push(m);
-        }
+        var key = (m.threadId && m.folder !== 'Sent') ? m.threadId : m.mailId;
+        if (!key) { singles.push(m); return; }
+        if (!groupMap[key]) groupMap[key] = [];
+        groupMap[key].push(m);
       });
 
       // Build display list: one entry per thread (newest), one per single mail
       var displayItems = [];
-      for (var tid in threadMap) {
-        var group = threadMap[tid];
+      for (var tid in groupMap) {
+        var group = groupMap[tid];
         group.sort(function(a, b) { return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(); });
         var latest = group[0];
         latest._threadCount = group.length;
         latest._threadMails = group;
+        // Mark multi-recipient groups so the row shows "(N)" and a To summary
+        latest._recipientCount = group.length;
+        latest._recipientNames = group.map(function(g) { return g.receiverName || g.receiverEmail; });
         displayItems.push(latest);
       }
       singles.forEach(function(m) { displayItems.push(m); });
@@ -3598,7 +3735,23 @@
         var threadBadge = showAsThread
           ? '<span class="mail-thread-badge" title="' + threadCount + ' messages in this conversation"><i class="ti ti-messages" style="font-size:10px"></i> ' + threadCount + '</span>'
           : '';
-        
+
+        // Multi-recipient badge: one row = one send to N people (e.g. Sent folder)
+        var multiBadge = (!showAsThread && threadCount > 1)
+          ? '<span class="mail-thread-badge" title="' + threadCount + ' recipients"><i class="ti ti-users" style="font-size:10px"></i> ' + threadCount + '</span>'
+          : '';
+
+        // In Sent/Outbox folders, show who it was sent To instead of the sender
+        var toLine = '';
+        if (m.folder === 'Sent') {
+          var names = (m._recipientNames && m._recipientNames.length > 0)
+            ? m._recipientNames
+            : [m.receiverName || m.receiverEmail];
+          var toSummary = names.slice(0, 3).map(function(n) { return _esc(n); }).join(', ');
+          if (names.length > 3) toSummary += ' +' + (names.length - 3);
+          toLine = '<div class="mail-email-preview" style="color:#1a3faa"><i class="ti ti-send" style="font-size:10px"></i> To: ' + toSummary + '</div>';
+        }
+
         // Show CC badge if current user is a CC recipient (not primary To)
         var ccBadge = '';
         if (m.cc && sessionEmail) {
@@ -3619,8 +3772,8 @@
                 '<span class="mail-email-date">' + _esc(timeAgo(m.timestamp)) + '</span>' +
                 attBadge + priorityBadge + labelBadge + ccBadge +
               '</div>' +
-              '<div class="mail-email-subject">' + (isUnread ? '<strong>' + subjectText + '</strong>' : subjectText) + threadBadge + '</div>' +
-              '<div class="mail-email-preview">' + (isUnread ? '<strong>' + bodyText + '</strong>' : bodyText) + '</div>' +
+              '<div class="mail-email-subject">' + (isUnread ? '<strong>' + subjectText + '</strong>' : subjectText) + threadBadge + multiBadge + '</div>' +
+              (m.folder === 'Sent' ? toLine : '<div class="mail-email-preview">' + (isUnread ? '<strong>' + bodyText + '</strong>' : bodyText) + '</div>') +
             '</div>' +
           '</div>' +
         '</div>';
@@ -4116,6 +4269,7 @@
               <p>The message has been moved to Trash for you.</p>
             </div>`;
           loadMails();
+          refreshMailCounts(); // update sidebar badges instantly (no reload)
         }
       }, function(err) {
         hideLoading();
@@ -4231,10 +4385,16 @@
     var _mailUsersLoaded = false;
     var _mailToSelectedIdx = -1;
     var _mailRecipients = []; // [{email, name}] for bulk mail chips
+    var _TEST_ACCOUNTS = ['mec-test@fob.ng','project-test@fob.ng','planning-test@fob.ng','sd-test@fob.ng'];
 
     function _addMailRecipient(email, name) {
       email = (email || '').trim().toLowerCase();
       if (!email) return;
+      // Reject department test accounts — they are not real recipients
+      if (_TEST_ACCOUNTS.indexOf(email) !== -1) {
+        showFrontendMessage('Test accounts (MEC/PROJECT/PLANNING/SD-METRO test users) cannot be messaged. Remove them and pick a real person.', 'warning');
+        return;
+      }
       // Deduplicate
       if (_mailRecipients.some(function(r) { return r.email === email; })) return;
       _mailRecipients.push({ email: email, name: name || email });
@@ -4279,13 +4439,22 @@
       var suggestionsBox = document.getElementById('mail-to-suggestions');
       if (!mailToInput || !suggestionsBox) return;
 
+      // Department TEST accounts must never be selectable as mail recipients.
+      var TEST_ACCOUNTS = ['mec-test@fob.ng','project-test@fob.ng','planning-test@fob.ng','sd-test@fob.ng'];
+
+      function _filterTestAccounts(list) {
+        return (list || []).filter(function(u) {
+          return TEST_ACCOUNTS.indexOf(String(u.email || '').toLowerCase()) === -1;
+        });
+      }
+
       function _getUsers() {
         if (globalUsersData && globalUsersData.length > 0) return globalUsersData;
         if (_mailUsersLoaded) return [];
         _mailUsersLoaded = true;
         gasCall('searchUsers', [''], function(res) {
           if (res.success && res.users && res.users.length > 0) {
-            globalUsersData = res.users;
+            globalUsersData = _filterTestAccounts(res.users);
           }
           _mailUsersLoaded = true;
           _renderSuggestions(mailToInput.value || '');
@@ -4592,9 +4761,22 @@
     function _doSendMail(to, subject, body, attachments, cc, bcc, priority, labels, threadId) {
       showLoading('Sending mail...');
       var wasThreadReply = !!threadId;
+
+      // ── DOUBLE-SEND GUARD: block re-entrant send while a send is in flight ──
+      // A fast double-click on Send (or Ctrl/Cmd+Enter + click) would otherwise
+      // fire sendMail() twice before closeCompose() clears the form. This guard
+      // ensures only ONE sendMail() reaches the backend per send action.
+      if (window.__mailSending) {
+        hideLoading();
+        return;
+      }
+      window.__mailSending = true;
+
       gasCall('sendMail', [to, subject, body, attachments, cc, bcc, labels, priority, threadId || ''], function(res) {
         hideLoading();
+        window.__mailSending = false;
         if (res.success) {
+          if (res.warning) showFrontendMessage(res.warning, "warning");
           showFrontendMessage("Message sent successfully!", "success");
           closeCompose();
           _clearMailRecipients();
@@ -4618,6 +4800,7 @@
         }
       }, function(err) {
         hideLoading();
+        window.__mailSending = false;
         showFrontendMessage('System error sending mail: ' + (err.message || 'unknown'), 'error');
       });
     }
@@ -4641,21 +4824,35 @@
       return new Date(isoString).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     }
 
-    function playNotificationSound() {
+    function playNotificationSound(kind) {
       try {
         var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        var oscillator = audioCtx.createOscillator();
-        var gainNode = audioCtx.createGain();
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-        oscillator.frequency.setValueAtTime(660, audioCtx.currentTime + 0.1);
-        gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-        oscillator.start(audioCtx.currentTime);
-        oscillator.stop(audioCtx.currentTime + 0.3);
-      } catch(e) {}
+        // Distinct, recognisable chime per notification type so users learn them.
+        // Browsers block audio in background tabs (autoplay policy) — when that
+        // happens the OS-level Web Notification still fires (see fireNotification).
+        var profiles = {
+          mail:    [880, 660, 880],
+          pat:     [660, 990, 990],
+          audit:   [523, 784, 1046],
+          reminder: [740, 740, 560],
+          default: [880, 660]
+        };
+        var seq = profiles[kind] || profiles.default;
+        var t0 = audioCtx.currentTime;
+        seq.forEach(function (freq, i) {
+          var osc = audioCtx.createOscillator();
+          var gain = audioCtx.createGain();
+          osc.connect(gain); gain.connect(audioCtx.destination);
+          osc.type = 'sine';
+          var start = t0 + i * 0.12;
+          osc.frequency.setValueAtTime(freq, start);
+          gain.gain.setValueAtTime(0.0001, start);
+          gain.gain.exponentialRampToValueAtTime(0.35, start + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.11);
+          osc.start(start);
+          osc.stop(start + 0.12);
+        });
+      } catch (e) {}
     }
 
     function formatMailDate(isoString) {
@@ -4723,11 +4920,14 @@
               lastMailCounts[folder] = newCount;
             });
 
-            // Notification for new inbox mail
-            if (counts.Inbox > prevInbox && prevInbox > 0) {
-              var newMails = counts.Inbox - prevInbox;
-              playNotificationSound();
-              showFrontendMessage(newMails + ' new mail' + (newMails > 1 ? 's' : '') + ' received!', 'info');
+            // Front-end: if the Inbox grew (new mail arrived), refresh the list
+            // silently so the message shows up without the user reloading. Only
+            // when the user is actually looking at the Inbox — never disrupt
+            // another folder.
+            var newInbox = counts.Inbox || 0;
+            var prevInbox = lastMailCounts['Inbox'] || 0;
+            if (newInbox > prevInbox && currentMailFolder === 'Inbox' && !window.__mailSending) {
+              loadMails(true);
             }
           }
         }, function() {});
@@ -4740,6 +4940,331 @@
         clearInterval(mailPollTimer);
         mailPollTimer = null;
       }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // SUPER-ADVANCED NOTIFICATION CENTER
+    //   - Role-aware feed from getMyNotifications (server-authoritative)
+    //   - In-page bell + dropdown + badge
+    //   - Native Web Notifications (OS-level push) with permission flow
+    //   - Sound alert (reuses playNotificationSound)
+    //   - AUTO-REMINDER: any unread item re-surfaces after REMIND_AFTER_MS
+    //     (and again at 2x / 3x) until the user opens it, so nothing is missed.
+    //   - Audit users get an audit-tuned experience (compliance framing).
+    // ══════════════════════════════════════════════════════════════
+    var NOTIF_STATE = {
+      items: {},          // id -> { ...item, read:bool, firstSeen:ts, lastReminded:ts, remindCount:int }
+      seenIds: {},        // id -> true (ever shown)
+      open: false,
+      pollTimer: null,
+      enabled: false,     // native push enabled
+      role: '',
+      dept: '',
+      isAudit: false
+    };
+    var REMIND_AFTER_MS = 3 * 60 * 60 * 1000;   // first auto-reminder 3h after the PAT was created
+    var REMIND_STEP_MS   = 3 * 60 * 60 * 1000;   // then every 3 hours after that
+    var MAX_REMINDS      = 3;
+    // Stable per-item phase offset (0..REMIND_STEP_MS) derived from the id so two
+    // PATs created at the same moment still remind at DIFFERENT times instead of
+    // all chiming together. Combined with the creation-time anchor this keeps the
+    // reminder stream staggered across every PAT in the queue.
+    function _reminderPhase(id) {
+      var h = 0, s = String(id || '');
+      for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; }
+      return h % REMIND_STEP_MS;
+    }
+
+    function notifInit(role, dept, isAudit) {
+      NOTIF_STATE.role = (role || '').toLowerCase();
+      NOTIF_STATE.dept = (dept || '').toLowerCase();
+      NOTIF_STATE.isAudit = !!isAudit;
+      // Wire bell toggle
+      var trig = document.getElementById('notif-trigger');
+      if (trig) {
+        trig.addEventListener('click', function (e) {
+          e.stopPropagation();
+          NOTIF_STATE.open = !NOTIF_STATE.open;
+          var dd = document.getElementById('notif-dropdown');
+          if (dd) dd.classList.toggle('active', NOTIF_STATE.open);
+          if (NOTIF_STATE.open) renderNotifications();
+        });
+      }
+      document.addEventListener('click', function () {
+        var dd = document.getElementById('notif-dropdown');
+        if (dd) dd.classList.remove('active');
+        NOTIF_STATE.open = false;
+      });
+      // ── Native OS push permission ──
+      // If already granted → enable immediately. If undecided → show a clear,
+      // visible banner that asks the user to allow notifications (so they don't
+      // silently miss it). The actual browser prompt fires on that click.
+      if ('Notification' in window) {
+        if (Notification.permission === 'granted') {
+          NOTIF_STATE.enabled = true;
+        } else if (Notification.permission !== 'denied') {
+          _showNotifPermissionBanner();
+        }
+        updateNotifEnableBtn();
+      }
+      startNotificationPolling();
+    }
+
+    function _showNotifPermissionBanner() {
+      // Avoid stacking duplicate banners
+      if (document.getElementById('notif-permission-banner')) return;
+      var bar = document.createElement('div');
+      bar.id = 'notif-permission-banner';
+      bar.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;' +
+        'background:#0d1526;color:#fff;padding:12px 16px;border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.25);' +
+        'display:flex;align-items:center;gap:14px;max-width:92vw;font-size:13px;font-weight:500;';
+      bar.innerHTML =
+        '<i class="ti ti-bell" style="font-size:18px;color:#fbbf24"></i>' +
+        '<span>Turn on browser notifications so PAT messages reach you on ANY tab — even without refreshing.</span>' +
+        '<button id="notif-allow-btn" style="background:#1a3faa;color:#fff;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:600;white-space:nowrap">Allow</button>' +
+        '<button id="notif-dismiss-btn" style="background:transparent;color:#94a3b8;border:0;cursor:pointer;font-size:18px;line-height:1">&times;</button>';
+      document.body.appendChild(bar);
+      function ask() {
+        try {
+          Notification.requestPermission().then(function (p) {
+            NOTIF_STATE.enabled = (p === 'granted');
+            updateNotifEnableBtn();
+            if (p === 'granted') {
+              // Confirm it works with a real voice + test toast
+              try {
+                if ('speechSynthesis' in window) {
+                  var u = new SpeechSynthesisUtterance('Notifications enabled');
+                  window.speechSynthesis.speak(u);
+                }
+              } catch (e) {}
+              showFrontendMessage('Notifications ON — PAT messages will reach you on any tab.', 'success');
+            } else {
+              showFrontendMessage('Notifications not enabled. You still get in-page alerts + voice.', 'warning');
+            }
+          }).catch(function () {});
+        } catch (e) {}
+        if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
+      }
+      document.getElementById('notif-allow-btn').addEventListener('click', function (e) { e.stopPropagation(); ask(); });
+      document.getElementById('notif-dismiss-btn').addEventListener('click', function (e) { e.stopPropagation(); if (bar && bar.parentNode) bar.parentNode.removeChild(bar); });
+    }
+
+    function updateNotifEnableBtn() {
+      var btn = document.getElementById('notif-enable-btn');
+      if (!btn) return;
+      if (NOTIF_STATE.enabled) { btn.textContent = 'Alerts ON'; btn.style.background = '#16a34a'; }
+      else { btn.textContent = 'Enable alerts'; btn.style.background = '#1a3faa'; }
+    }
+
+    function enableNotificationSound() {
+      // First gesture: safe to create AudioContext + request OS permission.
+      try { playNotificationSound(); } catch (e) {}
+      if ('Notification' in window) {
+        if (Notification.permission === 'default') {
+          Notification.requestPermission().then(function (p) {
+            NOTIF_STATE.enabled = (p === 'granted');
+            updateNotifEnableBtn();
+          }).catch(function () {});
+        } else if (Notification.permission === 'granted') {
+          NOTIF_STATE.enabled = true;
+        }
+      }
+      updateNotifEnableBtn();
+    }
+
+    function startNotificationPolling() {
+      if (NOTIF_STATE.pollTimer) clearInterval(NOTIF_STATE.pollTimer);
+      NOTIF_STATE.pollTimer = setInterval(pollNotifications, 15000);
+      pollNotifications(); // immediate first pass
+    }
+    function stopNotificationPolling() {
+      if (NOTIF_STATE.pollTimer) { clearInterval(NOTIF_STATE.pollTimer); NOTIF_STATE.pollTimer = null; }
+    }
+
+    function pollNotifications() {
+      gasCall('getMyNotifications', [], function (res) {
+        if (!res || !res.success) return;
+        var list = res.notifications || [];
+        var incoming = {};
+        list.forEach(function (n) { incoming[n.id] = n; });
+
+        // Add or update items
+        list.forEach(function (n) {
+          var prev = NOTIF_STATE.items[n.id];
+          if (!prev) {
+            var _created = parseInt(n.createdAt || n.ts || '0', 10) || 0;
+            NOTIF_STATE.items[n.id] = {
+              id: n.id, kind: n.kind, title: n.title, body: n.body, href: n.href,
+              ts: n.ts, priority: n.priority || 'normal',
+              read: false, firstSeen: Date.now(), lastReminded: 0, remindCount: 0,
+              // Anchor reminders to the PAT's creation time (falling back to the
+              // notification ts / first-seen) so the cadence is "every 3h since the
+              // PAT was born", and a stable id-based phase keeps PATs from chiming
+              // in unison. A PAT created long ago is immediately due (overdue) and
+              // reminds right away, then every 3h.
+              createdAt: _created || Date.now(),
+              phaseOffset: _reminderPhase(n.id)
+            };
+            if (!NOTIF_STATE.seenIds[n.id]) {
+              NOTIF_STATE.seenIds[n.id] = true;
+              fireNotification(NOTIF_STATE.items[n.id], false); // new, not a reminder
+            }
+          } else {
+            // refresh volatile fields
+            prev.title = n.title; prev.body = n.body; prev.href = n.href; prev.ts = n.ts;
+          }
+        });
+
+        // Drop items no longer present (resolved/deleted) — but keep read ones briefly
+        Object.keys(NOTIF_STATE.items).forEach(function (id) {
+          if (!incoming[id]) delete NOTIF_STATE.items[id];
+        });
+
+        // Auto-reminder sweep
+        var now = Date.now();
+        Object.keys(NOTIF_STATE.items).forEach(function (id) {
+          var it = NOTIF_STATE.items[id];
+          if (it.read) return;
+          if (it.remindCount >= MAX_REMINDS) return;
+          // First reminder: anchored to the PAT's creation time (+ stable phase so
+          // multiple PATs don't all fire on the same tick). After that, every
+          // REMIND_STEP_MS (3h) from the last actual reminder.
+          var due = it.lastReminded
+            ? it.lastReminded + REMIND_STEP_MS
+            : (it.createdAt || it.firstSeen) + REMIND_AFTER_MS + (it.phaseOffset || 0);
+          if (now >= due) {
+            it.lastReminded = now;
+            it.remindCount++;
+            fireNotification(it, true); // reminder
+          }
+        });
+
+        updateNotifBadge();
+        if (NOTIF_STATE.open) renderNotifications();
+      }, function () {});
+    }
+
+    function fireNotification(item, isReminder) {
+      var prefix = isReminder ? 'Reminder: ' : (item.kind === 'audit' ? 'Audit: ' : (item.kind === 'pat' ? 'PAT: ' : ''));
+      var text = prefix + item.title;
+
+      // In-page toast
+      try { showFrontendMessage(text + (item.body ? ' — ' + item.body : ''), isReminder ? 'warning' : 'info', isReminder ? 7000 : 6000); } catch (e) {}
+
+      // Sound (skip for low-priority reminders to avoid spam — still chime on new + high)
+      if (!isReminder || item.priority === 'high') { try { playNotificationSound(item.kind); } catch (e) {} }
+
+      // ── REAL HUMAN VOICE announcer (works while you're logged in, any tab) ──
+      // Speaks a short, calm phrase so a new message is unmistakable even if the
+      // tab is in the background. Browser autoplay policies allow speech after the
+      // user has interacted at least once; this portal requires a login click, so
+      // it is always permitted.
+      try {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel(); // never stack voices
+          var phrase = 'PAT message';
+          if (item.kind === 'pat') phrase = 'PAT message received';
+          else if (item.kind === 'audit') phrase = 'Audit alert';
+          else if (item.kind === 'mail') phrase = 'New mail from ' + (item.title || 'someone');
+          else phrase = 'PAT message';
+          var u = new SpeechSynthesisUtterance(phrase);
+          u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
+          // Prefer a natural English voice if available
+          try {
+            var voices = window.speechSynthesis.getVoices() || [];
+            var eng = voices.find(function(v) { return /en[-_]/i.test(v.lang || ''); });
+            if (eng) u.voice = eng;
+          } catch (e) {}
+          window.speechSynthesis.speak(u);
+        }
+      } catch (e) {}
+
+      // Native OS push (only if permission already granted — see proactive ask in notifInit)
+      if (NOTIF_STATE.enabled && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+          var n = new Notification(text, { body: item.body || '', tag: item.id, renotify: isReminder });
+          n.onclick = function () { window.focus(); openNotifTarget(item); n.close(); };
+          setTimeout(function () { n.close(); }, 8000);
+        } catch (e) {}
+      }
+
+      // Bell ring animation
+      var bell = document.querySelector('#notif-trigger .nav-icon-btn');
+      if (bell) { bell.classList.remove('notif-bell-ring'); void bell.offsetWidth; bell.classList.add('notif-bell-ring'); }
+    }
+
+    function openNotifTarget(item) {
+      if (!item || !item.href) return;
+      // Close any open tab-content first, then open target via its tab
+      var target = item.href.replace('#', '');
+      var tab = document.querySelector('.tab[data-target="' + target + '"]');
+      if (tab && !tab.hasAttribute('hidden')) { tab.click(); }
+      else { window.location.hash = item.href; }
+      // mark read
+      if (NOTIF_STATE.items[item.id]) { NOTIF_STATE.items[item.id].read = true; }
+      updateNotifBadge();
+      if (NOTIF_STATE.open) renderNotifications();
+    }
+
+    function markAllNotificationsRead() {
+      Object.keys(NOTIF_STATE.items).forEach(function (id) { NOTIF_STATE.items[id].read = true; });
+      updateNotifBadge();
+      renderNotifications();
+    }
+
+    function updateNotifBadge() {
+      var unread = Object.keys(NOTIF_STATE.items).filter(function (id) { return !NOTIF_STATE.items[id].read; }).length;
+      var badge = document.getElementById('notif-badge');
+      if (!badge) return;
+      if (unread > 0) {
+        badge.style.display = 'flex';
+        badge.textContent = unread > 99 ? '99+' : String(unread);
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    function notifTimeAgo(ts) {
+      if (!ts) return '';
+      var d = new Date(ts).getTime();
+      if (isNaN(d)) return '';
+      var s = Math.floor((Date.now() - d) / 1000);
+      if (s < 60) return 'just now';
+      if (s < 3600) return Math.floor(s / 60) + 'm ago';
+      if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+      return Math.floor(s / 86400) + 'd ago';
+    }
+
+    function renderNotifications() {
+      var listEl = document.getElementById('notif-list');
+      var emptyEl = document.getElementById('notif-empty');
+      if (!listEl) return;
+      var items = Object.keys(NOTIF_STATE.items).map(function (id) { return NOTIF_STATE.items[id]; });
+      // Newest first
+      items.sort(function (a, b) { return (b.firstSeen || 0) - (a.firstSeen || 0); });
+      if (items.length === 0) {
+        listEl.innerHTML = '';
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+      }
+      if (emptyEl) emptyEl.style.display = 'none';
+      listEl.innerHTML = items.map(function (it) {
+        var ico = it.kind === 'mail' ? '✉️' : (it.kind === 'audit' ? '🛡️' : '📋');
+        var cls = 'notif-item' + (it.read ? ' read' : ' unread') + (it.remindCount > 0 && !it.read ? ' reminder' : '') + ' new';
+        var tag = it.remindCount > 0 && !it.read ? '<span style="color:#b45309;font-weight:600">Reminder</span>' : '';
+        return '<div class="' + cls + '" onclick="openNotifTargetById(\'' + _jsStr(it.id) + '\')">' +
+            '<div class="notif-ico ' + (it.remindCount > 0 && !it.read ? 'reminder' : it.kind) + '">' + ico + '</div>' +
+            '<div class="notif-body">' +
+              '<div class="notif-title">' + _esc(it.title) + '</div>' +
+              '<div class="notif-text">' + _esc(it.body || '') + '</div>' +
+              '<div class="notif-meta"><span class="notif-dot"></span>' + notifTimeAgo(it.ts) + (tag ? ' · ' + tag : '') + '</div>' +
+            '</div></div>';
+      }).join('');
+    }
+
+    function openNotifTargetById(id) {
+      var it = NOTIF_STATE.items[id];
+      if (it) openNotifTarget(it);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -4770,6 +5295,7 @@
         if (res.success) {
           showFrontendMessage('Mail archived.', 'success');
           switchFolder('Archive', document.querySelectorAll('.mail-folder-item')[3]);
+          refreshMailCounts(); // update sidebar badges instantly (no reload)
         } else {
           showFrontendMessage(res.message || 'Failed to archive.', 'error');
         }
@@ -4783,6 +5309,7 @@
         if (res.success) {
           showFrontendMessage('Mail restored to Inbox.', 'success');
           switchFolder('Inbox', document.querySelectorAll('.mail-folder-item')[0]);
+          refreshMailCounts(); // update sidebar badges instantly (no reload)
         } else {
           showFrontendMessage(res.message || 'Failed to restore.', 'error');
         }
@@ -4795,6 +5322,7 @@
         hideLoading();
         if (res.success) {
           loadMails();
+          refreshMailCounts(); // update sidebar badges instantly (no reload)
           if (typeof openMail === 'function' && document.querySelector('[data-mail-id="' + mailId + '"]')) {
             gasCall('getMailById', [mailId], function(r) {
               if (r.success) renderMailDetail(r.mail);
@@ -4814,10 +5342,7 @@
         if (res.success) {
           showFrontendMessage('Mail permanently deleted.', 'success');
           document.getElementById('detailContainer').innerHTML = '<div class="mail-detail-empty"><i class="ti ti-trash" style="font-size:48px;color:#cbd5e1;margin-bottom:12px"></i><div style="color:#64748b">Select a mail to read</div></div>';
-          // Refresh all folder counts
-          gasCall('getAllMailCounts', [], function(r) {
-            if (r.success && r.counts) updateAllMailCounts(r.counts);
-          });
+          refreshMailCounts(); // update sidebar badges instantly (no reload)
         } else {
           showFrontendMessage(res.message || 'Failed to delete.', 'error');
         }
@@ -4836,6 +5361,7 @@
         if (res.success) {
           showFrontendMessage('Trash emptied. ' + (res.deletedCount || 0) + ' mails deleted.', 'success');
           loadMails();
+          refreshMailCounts(); // update sidebar badges instantly (no reload)
         } else {
           showFrontendMessage(res.message || 'Failed to empty trash.', 'error');
         }
@@ -5133,6 +5659,7 @@
 
     function showLoading(message = 'Loading...') {
       activeOperations++;
+      window.__lastOpStart = Date.now();
       let loadingLine = document.getElementById('loading-line');
       if (!loadingLine) {
         loadingLine = document.createElement('div');
@@ -5184,33 +5711,28 @@
     // Stuck loading watchdog — if GAS hangs and the progress bar gets stuck,
     // this will auto-reset the bar after 45s so the user can try again.
     // -----------------------------------------------------------------------
+    // Stuck loading watchdog — guarantees the bar can NEVER stay visible
+    // forever. A bar is "stuck" the moment activeOperations > 0 for more than
+    // 35s (the gasCall timeout is 35s). Any bar left on-screen past that is a
+    // hung/orphaned operation and is force-cleared so the user is never blocked.
+    // -----------------------------------------------------------------------
     setInterval(function() {
       var ll = document.getElementById('loading-line');
-      if (ll && ll._startTime && activeOperations > 0) {
-        var stuckMs = Date.now() - ll._startTime;
-        // Only fire if bar is stuck around the simulated phase (15-90%) for >40s
-        var w = parseFloat(ll.style.width) || 0;
-        if (stuckMs > 40000 && w > 0 && w < 95) {
-          console.warn('[Watchdog] Loading bar stuck for ' + Math.round(stuckMs / 1000) +
-            's at ' + w.toFixed(0) + '%. Force-resetting.');
-          if (ll._progressInterval) {
-            clearInterval(ll._progressInterval);
-            ll._progressInterval = null;
-          }
-          // Let any in-flight gasCall timeout handler fire; don't race it
-          setTimeout(function() {
-            if (activeOperations > 0) {
-              activeOperations = 0;
-            }
-            ll.style.transition = 'width 0.15s ease-out, opacity 0.25s ease-out';
-            ll.style.width = '0%';
-            ll.style.opacity = '0';
-            showFrontendMessage(
-              'A previous request timed out. Please retry.', 'warning', 4000);
-          }, 500);
-        }
+      if (!ll) return;
+      var w = parseFloat(ll.style.width) || 0;
+      var visible = (ll.style.opacity !== '0' && w > 0);
+      if (!visible) return;
+      var stuckMs = (window.__lastOpStart ? Date.now() - window.__lastOpStart : 0);
+      if (activeOperations > 0 && stuckMs > 35000) {
+        console.warn('[Watchdog] Loading bar stuck for ' + Math.round(stuckMs / 1000) + 's. Force-resetting.');
+        if (ll._progressInterval) { clearInterval(ll._progressInterval); ll._progressInterval = null; }
+        activeOperations = 0;
+        ll.style.transition = 'width 0.2s ease-out, opacity 0.3s ease-out';
+        ll.style.width = '0%';
+        ll.style.opacity = '0';
+        showFrontendMessage('A previous request was taking too long and was cancelled. Please retry.', 'warning', 4000);
       }
-    }, 10000);
+    }, 5000);
 
     // Show frontend message (replaces alert and console.log)
     function showFrontendMessage(message, type = 'info', duration = 5000) {
@@ -5297,6 +5819,35 @@
       window.location.href = 'auth.html';
     }
 
+    // ── BANNED ACCOUNT ENFORCEMENT (dashboard) ──
+    // When a ban is applied (or a pending session is detected), the backend
+    // returns "__BANNED__::reason::by". Redirect the user to the standalone
+    // ban page (ban.html) — the same destination the login flow uses — so the
+    // experience is identical whether they sign in fresh or are already in the
+    // dashboard when the ban lands. The ban page serves without a session and
+    // clears any stale token on load.
+    function handleBannedAccount(message) {
+      var parts = String(message || '').split('::');
+      var reason = parts[1] || 'Your account has been suspended by an administrator.';
+      var bannedBy = parts[2] || 'Administrator';
+      try { sessionStorage.removeItem('sd_token'); } catch (e) {}
+      var r = encodeURIComponent(reason);
+      var b = encodeURIComponent(bannedBy);
+      var t = Date.now();
+      var href;
+      if (typeof GAS_READY !== 'undefined' && GAS_READY) {
+        var u = new URL(window.location.href);
+        u.searchParams.set('page', 'ban');
+        u.searchParams.set('reason', r);
+        u.searchParams.set('by', b);
+        u.searchParams.set('t', t);
+        href = u.toString();
+      } else {
+        href = 'ban.html?reason=' + r + '&by=' + b + '&t=' + t;
+      }
+      window.location.href = href;
+    }
+
     document.getElementById('drop-logout').addEventListener('click', (e) => {
       e.stopPropagation();
       if (!confirm('Are you sure you want to log out?')) return;
@@ -5313,34 +5864,35 @@
 
     // Backend URL — from localStorage, GAS injection, or domain-based fallback.
     // The domain mapping below ONLY applies to the official deployment domain.
-    // It lets the static files on pat.fob.net.ng connect without hardcoding
-    // the URL in a way that helps cloned copies on other domains.
-    var WEB_APP_URL = localStorage.getItem('fob_backend_url') || '';
+    // Resolve the backend URL.
+    // NOTE on priority: on the official deployment domain we ALWAYS use the
+    // hardcoded KNOWN_DOMAINS URL and overwrite any stale localStorage entry.
+    // Previously localStorage was read first, which pinned browsers to an old
+    // deployment URL forever — pushes/deploys never reached the live portal.
+    var WEB_APP_URL = '';
+    var host = window.location.hostname.toLowerCase();
+    var KNOWN_DOMAINS = {
+      'pat.fob.net.ng': 'https://script.google.com/macros/s/AKfycbzx2SiLFII6oVEpb1rwOD2XnVSGEXfRtMMJphHIADaKSR3uGaDiFISND0ky712x63mY/exec',
+      'localhost': true,  // localhost requires sheet config check
+      '127.0.0.1': true
+    };
 
     try {
+      // 1) GAS-injected scriptUrl (when served from the Apps Script iframe)
       if (typeof scriptUrl !== 'undefined' && String(scriptUrl).indexOf('http') === 0) {
         WEB_APP_URL = scriptUrl;
         localStorage.setItem('fob_backend_url', scriptUrl);
       }
-    } catch (e) {}
-
-    // Domain-based auto-config: only activates on the official deployment domain
-    if (!WEB_APP_URL) {
-      var host = window.location.hostname.toLowerCase();
-      var KNOWN_DOMAINS = {
-        'pat.fob.net.ng': 'https://script.google.com/macros/s/AKfycbw4tb8ahqX7bCs_MnPyblmz-Ke8h9CIlk_BMwGF9NbuHwr3n5sPT0pcpagg1DX57U2x/exec',
-        'localhost': true,  // localhost requires sheet config check
-        '127.0.0.1': true
-      };
-      if (KNOWN_DOMAINS[host]) {
-        if (KNOWN_DOMAINS[host] === true) {
-          // localhost — don't set URL yet, gasCall will try to fetch config
-        } else {
-          WEB_APP_URL = KNOWN_DOMAINS[host];
-          localStorage.setItem('fob_backend_url', WEB_APP_URL);
-        }
+      // 2) Official domain: force the current deployment URL (wins over stale storage)
+      else if (KNOWN_DOMAINS[host] && KNOWN_DOMAINS[host] !== true) {
+        WEB_APP_URL = KNOWN_DOMAINS[host];
+        localStorage.setItem('fob_backend_url', WEB_APP_URL);
       }
-    }
+      // 3) Fall back to any previously saved URL (e.g. localhost after config)
+      else {
+        WEB_APP_URL = localStorage.getItem('fob_backend_url') || '';
+      }
+    } catch (e) {}
 
     var IS_GAS_ENV = (typeof google !== 'undefined' && google.script && google.script.run);
 
@@ -5355,6 +5907,11 @@
 
       const interceptResponse = (res) => {
         if (res && res.success === false && res.message) {
+          // ── BANNED ACCOUNT: force logout from the dashboard immediately ──
+          if (String(res.message).indexOf('__BANNED__') === 0) {
+            handleBannedAccount(res.message);
+            return;
+          }
           var safeMsg = _safeErrorMessage(res);
           if (res.message.includes("sign in again")) {
             showFrontendMessage(safeMsg, 'warning');
@@ -5393,7 +5950,11 @@
 
       const interceptError = (err) => {
         var safeMsg = _safeErrorMessage(err);
-        if (err && err.message && err.message.includes("sign in again")) {
+        if (err && err.message && (err.message.includes("sign in again") || err.message.indexOf('__BANNED__') === 0)) {
+          if (String(err.message).indexOf('__BANNED__') === 0) {
+            handleBannedAccount(err.message);
+            return;
+          }
           showFrontendMessage(safeMsg, 'warning');
           redirectToAuth();
           return;
@@ -5446,8 +6007,12 @@
             if (!res.ok) throw new Error('HTTP error! status: ' + res.status);
             return res.json();
           })
-          .then(interceptResponse)
+          .then(function(json) {
+            hideLoading();
+            interceptResponse(json);
+          })
           .catch(function(err) {
+            hideLoading();
             interceptError(new Error('Backend unreachable. Ensure you are accessing via the official portal.'));
           });
       } catch (e) {
@@ -5585,24 +6150,43 @@
           document.getElementById('nav-name').innerText = _session.name;
           document.getElementById('nav-avatar').innerText = (_session.name || '??').split(' ').map(n => n[0]).join('').toUpperCase();
 
-          // ── Department-based Tab Visibility (authoritative) ──
+          // ── Department/Role Tab Visibility (authoritative, reveal-by-role) ──
+          // Tabs are hidden by default in markup to prevent a preload flash for
+          // users who shouldn't see them. We only REVEAL what this role allows.
           const isAdmin = _session.role === 'admin' || _session.role === 'super admin';
           const isSuperAdmin = _session.role === 'super admin';
           const department = (_session.department || '').toLowerCase();
-          if (department !== 'mec' && !isAdmin) {
-            const restrictedTabs = ['departments', 'users'];
-            restrictedTabs.forEach(id => {
-              const tab = document.querySelector(`.tab[data-target="${id}"]`);
-              if (tab) tab.style.display = 'none';
-            });
-            if (restrictedTabs.includes(document.querySelector('.tab.active').dataset.target)) {
+
+          // Helper: reveal a tab (clears both `hidden` attr and inline display:none)
+          const revealTab = (id) => {
+            const tab = document.querySelector(`.tab[data-target="${id}"]`);
+            if (tab) { tab.hidden = false; tab.style.display = ''; }
+          };
+
+          // Settings is visible to everyone once signed in (but super-admin gets extra sections below).
+          revealTab('settings');
+
+          // Admin-only tabs: Departments, Our Team, SLA Tracker, Performance
+          if (isAdmin) {
+            revealTab('departments');
+            revealTab('our-team');
+            revealTab('sla');
+            revealTab('performance');
+          } else {
+            // Non-admin must never land on a restricted tab.
+            const restricted = ['departments', 'our-team', 'sla', 'performance'];
+            const activeTarget = (document.querySelector('.tab.active') || {}).dataset
+              ? document.querySelector('.tab.active').dataset.target : 'sd-ai';
+            if (restricted.includes(activeTarget)) {
               const patTab = document.querySelector('.tab[data-target="pat-projects"]');
               if (patTab) patTab.click();
             }
           }
-          if (!isSuperAdmin) {
-            const blTab = document.querySelector('.tab[data-target="blacklist"]');
-            if (blTab) blTab.style.display = 'none';
+
+          // Super-admin-only tabs: Users (full list), Blacklist
+          if (isSuperAdmin) {
+            revealTab('users');
+            revealTab('blacklist');
           }
 
           // Populate Settings
@@ -5610,12 +6194,17 @@
           document.getElementById('set-email').value = _session.email;
           document.getElementById('set-role').value = _session.role + ' (' + _session.department + ')';
 
-          if (_session.role === 'super admin') {
+          if (isSuperAdmin) {
             document.querySelectorAll('.social-tab').forEach(t => t.style.display = 'none');
             pageTitle.innerText = "System Control Center";
             const devSection = document.getElementById('developer-settings-section');
             if (devSection) devSection.style.display = '';
+            const saSection = document.getElementById('superadmin-usermgmt-section');
+            if (saSection) saSection.style.display = '';
           }
+
+          // Boot the Notification Center (role-aware, audit-tuned)
+          try { notifInit(_session.role, _session.department, isSuperAdmin || _session.role === 'audit' || (_session.department || '').toLowerCase() === 'audit'); } catch (e) {}
 
           // Show Clear All Mail button for admins
           var clearBtn = document.getElementById('clear-all-mail-btn');
@@ -5722,9 +6311,20 @@
         if (res.success) {
           const currentRole = _session.role;
           globalUsersData = res.users;
+          // Super Admin accounts are NEVER shown in the Users list — they are
+          // managed only through the Super Admin user-management section. This
+          // keeps the privileged account out of the standard user directory.
+          const visibleUsers = (res.users || []).filter(function(u) {
+            // Super Admin accounts are managed only in the Super Admin section.
+            // Store / Machine users are a SEPARATE domain (the Store Desk) and
+            // must NEVER appear in the PAT user directory or org chart — they are
+            // created by the PAT admin but belong to the Machine side.
+            var rl = (u.role || '').toLowerCase();
+            return rl !== 'super admin' && rl !== 'store';
+          });
           const tbody = document.querySelector('#users .data-table tbody');
-          if (res.users.length > 0) {
-            tbody.innerHTML = res.users.map(u => {
+          if (visibleUsers.length > 0) {
+            tbody.innerHTML = visibleUsers.map(u => {
               var un = _esc(u.name);
               var ue = _esc(u.email);
               var ud = _esc(u.department);
@@ -5741,11 +6341,12 @@
                 '<button class="btn-primary" style="padding:4px 8px; font-size:11px;" onclick="openEditUserModal(\'' + _jsStr(u.userId) + '\', \'' + _jsStr(u.name) + '\', \'' + _jsStr(u.email) + '\', \'' + _jsStr(u.department) + '\', \'' + _jsStr(u.role) + '\', \'' + _jsStr(u.gender) + '\')">Edit</button>' +
                 '<button class="btn-primary" style="padding:4px 8px; font-size:11px;" onclick="toggleUserRole(\'' + _jsStr(u.userId) + '\', \'' + _jsStr(u.role) + '\')">' + (u.role && u.role.includes('admin') ? 'Demote' : 'Promote') + '</button>' +
                 (u.status === 'active'
-                  ? '<button class="btn-primary" style="padding:4px 8px; font-size:11px; background:#dc2626;" onclick="banUserWithBlacklist(\'' + _jsStr(u.userId) + '\', \'' + _jsStr(u.name) + '\', \'' + _jsStr(u.email) + '\')">Ban</button>'
+                  ? '<button class="btn-primary" style="padding:4px 8px; font-size:11px; background:#dc2626;" onclick="banUserWithBlacklist(\'' + _jsStr(u.userId) + '\', \'' + _jsStr(u.name) + '\', \'' + _jsStr(u.email) + '\', \'' + _jsStr(u.role) + '\')">Ban</button>'
                   : '<button class="btn-primary" style="padding:4px 8px; font-size:11px; background:#22c55e;" onclick="unbanUserWithBlacklist(\'' + _jsStr(u.userId) + '\')">Activate</button>') +
                 '<button class="btn-primary" style="padding:4px 8px; font-size:11px; background:#e11d48;" onclick="confirmDeleteUser(\'' + _jsStr(u.userId) + '\')">Delete</button>' +
                 '<button class="btn-primary" style="padding:4px 8px; font-size:11px; background:#6366f1;" onclick="showUserIPs(\'' + encodeURIComponent(u.email || '') + '\', \'' + _jsStr(u.name) + '\')">IPs</button>' +
-                '<button class="btn-primary" style="padding:4px 8px;font-size:11px;background:#7c3aed;" onclick="showUserDevices(\'' + encodeURIComponent(u.email || '') + '\', \'' + _jsStr(u.name) + '\')">Devices</button>'
+                '<button class="btn-primary" style="padding:4px 8px;font-size:11px;background:#7c3aed;" onclick="showUserDevices(\'' + encodeURIComponent(u.email || '') + '\', \'' + _jsStr(u.name) + '\')">Devices</button>' +
+                '<button class="btn-primary" style="padding:4px 8px;font-size:11px;background:#0891b2;" onclick="resetUserPasswordByEmail(\'' + _jsStr(u.email) + '\', \'' + _jsStr(u.name) + '\')">Reset PW</button>'
                 : '<span style="font-size:11px; color:#8a90a0;">Restricted</span>';
               return '<tr>' +
                 '<td><strong>' + un + '</strong></td>' +
@@ -5831,6 +6432,17 @@
       else if (currentRole === 'admin') newRole = 'employee';
       else if (currentRole === 'super admin') newRole = 'admin';
 
+      // Super admin role can NEVER be changed by anyone.
+      if (currentRole === 'super admin') {
+        showFrontendMessage('Super admin role is protected and cannot be changed.', 'error');
+        return;
+      }
+      // Only a Super Admin may grant the Admin role (peak security — no other path mints admins).
+      if (newRole === 'admin' && (_session.role || '').toLowerCase() !== 'super admin') {
+        showFrontendMessage('Only a Super Admin can grant the Admin role.', 'error');
+        return;
+      }
+
       if (!confirm(`Are you sure you want to change this user's role from ${currentRole} to ${newRole}?`)) {
         return;
       }
@@ -5844,12 +6456,22 @@
       });
     }
 
-    function toggleUserStatus(userId, currentStatus) {
+    function toggleUserStatus(userId, currentStatus, userName, userEmail, userRole) {
+      // Super admin accounts are protected — cannot be banned by anyone.
+      if ((userRole || '').toLowerCase() === 'super admin') {
+        showFrontendMessage('Super admin accounts are protected and cannot be banned.', 'error');
+        return;
+      }
       const newStatus = currentStatus === 'active' ? 'banned' : 'active';
+      let reason = '';
+      if (newStatus === 'banned') {
+        reason = prompt(`Ban reason for ${userName || userEmail} (optional):`, 'Violation of policy');
+        if (reason === null) return;
+      }
       if (!confirm(`Are you sure you want to ${newStatus} this user?`)) {
         return;
       }
-      gasCall('updateUserStatus', [userId, newStatus], res => {
+      gasCall('updateUserStatus', [userId, newStatus, reason || ''], res => {
         if (res.success) {
           showFrontendMessage('User account ' + newStatus, 'success');
           loadAllData();
@@ -5859,7 +6481,12 @@
       });
     }
 
-    function banUserWithBlacklist(userId, userName, userEmail) {
+    function banUserWithBlacklist(userId, userName, userEmail, userRole) {
+      // Super admin accounts are protected — cannot be banned by anyone.
+      if ((userRole || '').toLowerCase() === 'super admin') {
+        showFrontendMessage('Super admin accounts are protected and cannot be banned.', 'error');
+        return;
+      }
       const reason = prompt('Ban reason (optional):', 'Violation of policy');
       if (reason === null) return;
       if (!confirm('This will ban ' + userName + ' (' + userEmail + ') and blacklist ALL their known IP addresses and devices. Continue?')) return;
@@ -6022,6 +6649,8 @@
                     <select id="edit-user-role" class="form-input">
                         <option value="employee" ${role === 'employee' ? 'selected' : ''}>Employee</option>
                         <option value="admin" ${role === 'admin' ? 'selected' : ''}>Admin</option>
+                        <option value="audit" ${role === 'audit' ? 'selected' : ''}>Audit</option>
+                        <option value="store" ${role === 'store' ? 'selected' : ''}>Store</option>
                         <option value="super admin" ${role === 'super admin' ? 'selected' : ''}>Super Admin</option>
                     </select>
                 </div>
@@ -6120,6 +6749,66 @@
         } else {
           showFrontendMessage('Error updating user: ' + res.message, 'error');
         }
+      });
+    }
+
+    // ── SUPER ADMIN: Create account (incl. Audit) ──
+    function superAdminCreateUser() {
+      const name = (document.getElementById('sa-name').value || '').trim();
+      let email = (document.getElementById('sa-email').value || '').trim().toLowerCase();
+      const password = (document.getElementById('sa-password').value || '').trim();
+      const department = document.getElementById('sa-dept').value;
+      const role = document.getElementById('sa-role').value;
+      if (!name || !email || !password) { showFrontendMessage('Name, email and password are required.', 'warning'); return; }
+      if (password.length < 4) { showFrontendMessage('Password must be at least 4 characters.', 'warning'); return; }
+      showLoading('Creating account...');
+      gasCall('adminCreateUser', [name, email, password, department, role, 'Other'], res => {
+        hideLoading();
+        if (res.success) {
+          showFrontendMessage('Account created: ' + email, 'success');
+          document.getElementById('sa-name').value = '';
+          document.getElementById('sa-email').value = '';
+          document.getElementById('sa-password').value = '';
+          if (typeof loadAllData === 'function') loadAllData();
+        } else {
+          showFrontendMessage('Error: ' + res.message, 'error');
+        }
+      });
+    }
+
+    // ── SUPER ADMIN: Reset any user's password ──
+    function superAdminResetPassword() {
+      let email = (document.getElementById('sa-reset-email').value || '').trim().toLowerCase();
+      const password = (document.getElementById('sa-reset-pass').value || '').trim();
+      if (!email || !password) { showFrontendMessage('Email and new password are required.', 'warning'); return; }
+      if (password.length < 4) { showFrontendMessage('Password must be at least 4 characters.', 'warning'); return; }
+      showLoading('Resetting password...');
+      gasCall('resetUserPassword', [email, password], res => {
+        hideLoading();
+        if (res.success) {
+          showFrontendMessage('Password reset for ' + email, 'success');
+          document.getElementById('sa-reset-email').value = '';
+          document.getElementById('sa-reset-pass').value = '';
+        } else {
+          showFrontendMessage('Error: ' + res.message, 'error');
+        }
+      });
+    }
+
+    // ── SUPER ADMIN: Reset password by tapping a user row (Users tab) ──
+    function resetUserPasswordByEmail(email, name) {
+      if ((_session.role || '').toLowerCase() !== 'super admin') {
+        showFrontendMessage('Only a Super Admin can reset passwords.', 'error');
+        return;
+      }
+      const pass = prompt('New password for ' + (name || email) + ' (min 4 chars):', '');
+      if (pass === null) return;
+      if (pass.trim().length < 4) { showFrontendMessage('Password must be at least 4 characters.', 'warning'); return; }
+      if (!confirm('Reset password for ' + email + '? Their current session will keep working until they next log in.')) return;
+      showLoading('Resetting password...');
+      gasCall('resetUserPassword', [email, pass.trim()], res => {
+        hideLoading();
+        showFrontendMessage(res.success ? ('Password reset for ' + email) : ('Error: ' + res.message), res.success ? 'success' : 'error');
       });
     }
 
@@ -6647,6 +7336,26 @@ var html = '<table style="width:100%;border-collapse:collapse;font-size:12px"><t
       var current = sel.value;
       // keep the placeholder
       sel.innerHTML = '<option value="">— Select officer —</option>';
+      // If the cache is empty, kick off a background user fetch so the list
+      // never appears blank. The dropdown is repopulated when the call returns.
+      if (!users.length) {
+        gasCall('getUsers', [], function(ures) {
+          if (ures && ures.success && ures.users) {
+            window.__perfUsersCache = ures.users;
+            populateOfficerSelect();
+          }
+        }, function() {});
+      }
+      // Always include the currently-selected officer even if it isn't in the
+      // directory (e.g. an older record referencing a renamed/removed user),
+      // so a saved value is NEVER silently wiped from the dropdown.
+      if (current && current !== '' &&
+          !users.some(function(u) { return (u.name || u.email) === current; })) {
+        var keep = document.createElement('option');
+        keep.value = current;
+        keep.textContent = current + ' (current)';
+        sel.appendChild(keep);
+      }
       users.forEach(function(u) {
         var label = (u.name || u.email || 'Unknown') + (u.department ? ' · ' + u.department : '');
         var opt = document.createElement('option');
@@ -7500,6 +8209,11 @@ function geocodeAddressBtnClick() {
         });
       }
 
+      // Expose to global scope so the PAT Site-Document uploader
+      // (processPatSiteDocFiles, which lives OUTSIDE this IIFE) can call it.
+      // Without this, selecting an image throws: "compressImageFile is not defined".
+      window.compressImageFile = compressImageFile;
+
       function _b64toBlob(b64, mime) {
         const bin = atob(b64);
         const len = bin.length;
@@ -7534,6 +8248,9 @@ function geocodeAddressBtnClick() {
           if (analysis.inspectionDate) document.getElementById('pm-date').value = normalizeDateInput(analysis.inspectionDate);
           if (analysis.presidingOfficer) document.getElementById('pm-presiding-officer').value = analysis.presidingOfficer;
 
+          // Detect similar existing PATs once the AI has populated name/address
+          checkPATSimilarity();
+
           if (analysis.checklist && typeof analysis.checklist === 'object') {
             Object.entries(analysis.checklist).forEach(([key, val]) => {
               const keyStr = String(key);
@@ -7551,7 +8268,6 @@ function geocodeAddressBtnClick() {
             const descs = document.querySelectorAll('.pm-boq-desc');
             const scopes = document.querySelectorAll('.pm-boq-scope');
             const insts = document.querySelectorAll('.pm-boq-inst');
-            const rems = document.querySelectorAll('.pm-boq-rem');
             const tbody = document.getElementById('boq-tbody');
             // Add more rows if data exceeds current rows
             while (tbody && tbody.querySelectorAll('tr').length < analysis.boq.length) {
@@ -7585,7 +8301,9 @@ function geocodeAddressBtnClick() {
               }
               if (item.scope && allScopes[i]) allScopes[i].value = item.scope;
               if (item.installed && allInsts[i]) allInsts[i].value = item.installed;
-              if (item.remark && allRems[i]) allRems[i].value = item.remark;
+              // Recompute variance + remark from the actual quantities so the
+              // remark is always correct (overrides any AI-supplied remark).
+              if (allInsts[i] && typeof calculateBOQVariance === 'function') calculateBOQVariance(allInsts[i]);
             });
           }
 
@@ -7669,20 +8387,31 @@ function geocodeAddressBtnClick() {
        }
 
       // ── NOTIFICATION SOUND ────────────────────────────────────
-      function playNotificationSound() {
+      function playNotificationSound(kind) {
         try {
           var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          var oscillator = audioCtx.createOscillator();
-          var gainNode = audioCtx.createGain();
-          oscillator.connect(gainNode);
-          gainNode.connect(audioCtx.destination);
-          oscillator.type = 'sine';
-          oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-          oscillator.frequency.setValueAtTime(660, audioCtx.currentTime + 0.1);
-          gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-          oscillator.start(audioCtx.currentTime);
-          oscillator.stop(audioCtx.currentTime + 0.3);
+          var profiles = {
+            mail:    [880, 660, 880],
+            pat:     [660, 990, 990],
+            audit:   [523, 784, 1046],
+            reminder: [740, 740, 560],
+            default: [880, 660]
+          };
+          var seq = profiles[kind] || profiles.default;
+          var t0 = audioCtx.currentTime;
+          seq.forEach(function (freq, i) {
+            var osc = audioCtx.createOscillator();
+            var gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.type = 'sine';
+            var start = t0 + i * 0.12;
+            osc.frequency.setValueAtTime(freq, start);
+            gain.gain.setValueAtTime(0.0001, start);
+            gain.gain.exponentialRampToValueAtTime(0.35, start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.11);
+            osc.start(start);
+            osc.stop(start + 0.12);
+          });
         } catch(e) { /* audio not supported */ }
       }
 
@@ -7909,7 +8638,9 @@ PAT COMMANDS:
 - GET_PAT_STATUS: {} - Project status overview
 - UPDATE_PAT_SNAGS: {"clear": true} or {"snags": [{...}]} - Clear all snags or set specific snag list
 - UPDATE_PAT_CHECKLIST: {"rangeStart": 0, "rangeEnd": 68, "value": "ok"} or {"checklist": {"0":"ok","1":"nok",...}} - Fill checklist items by range or full map
-- INTELLIGENT_FILL_AND_APPROVE: {} - Auto-fills all sections with intelligent demo data
+- INTELLIGENT_FILL_AND_APPROVE: {} - Auto-fills ALL sections with intelligent demo data AND saves it as a Draft PAT project. Use for "fill with random / create random PAT". Returns the new projectId. Emits this ONCE per request.
+- FILL_PAT_WITH_RANDOM_DATA: {} - Same as above: fills the form with random data and saves as a Draft. Use for "create and fill with random".
+NOTE: Only ONE of INTELLIGENT_FILL_AND_APPROVE / FILL_PAT_WITH_RANDOM_DATA should be emitted per message — do NOT also emit OPEN_PAT or FILL_PAT_FORM alongside them (that would double-handle the form). Each invocation creates exactly ONE new Draft PAT; repeated requests create additional distinct drafts by design.
 
 USER MANAGEMENT:
 - GET_USER_BY_EMAIL: {"email": "user@fob.ng"} - Look up user (Super Admin only)
@@ -7920,7 +8651,7 @@ USER MANAGEMENT:
 - CREATE_DEPT: {"name"} - New department
 - REFRESH_SYSTEM_DATA: {} - Full refresh
 - SYNC_ALL_SYSTEM_DATA: {} - Reload all data from database
-- DELETE_PAT_PROJECT: {"projectId": "PAT-XXXX"} - Delete ONE PAT project by its actual ID. CRITICAL: Look up the project ID from the numbered list above — position 1 maps to project index 0, not "project 1".
+- DELETE_PAT_PROJECT: {"projectId": "PAT-XXXX"} - Delete ONE PAT project by its actual ID. CRITICAL: Look up the project ID from the numbered list above — position 1 maps to project index 0, not "project 1". NEVER delete by position/index number (the list sort order differs from the database and would delete the WRONG project). MEC/Admin may only delete DRAFT PATs; Super Admin may delete any.
 
 IMAGE COMMANDS:
 - ADD_IMAGE_TO_PROJECT: {"projectId": "ID"} - Attach uploaded images to project
@@ -8186,35 +8917,42 @@ case 'OPEN_PAT':
                   return { success: false, message: 'Access Denied: Only MEC, Admin, and Super Admin can delete PAT projects.' };
                 }
 
-                // Resolve project IDs: support projectId, projectIndex (1-based position), or projectIds array
+                // Resolve project IDs: ONLY support explicit projectId or a
+                // projectIds array. Index-based deletes (projectIndex / "position
+                // N") are rejected: the displayed list order can differ from the
+                // backend sheet order (list sorts by score, LOAD sorts by
+                // submittedAt), so a position number can map to the WRONG project
+                // and delete an unrelated PAT. Always delete by real ID.
                 let targetIds = [];
 
                 if (p.projectIds && Array.isArray(p.projectIds)) {
                   targetIds = p.projectIds;
-                } else if (p.projectIndex != null) {
-                  const idx = parseInt(p.projectIndex) - 1;
-                  if (idx >= 0 && idx < allPATProjects.length) {
-                    targetIds = [allPATProjects[idx].projectId];
-                  } else {
-                    const listRes = await gasCallAsync('getPATProjects', []);
-                    if (listRes.success) allPATProjects = listRes.projects;
-                    const idx2 = parseInt(p.projectIndex) - 1;
-                    if (idx2 >= 0 && idx2 < allPATProjects.length) {
-                      targetIds = [allPATProjects[idx2].projectId];
-                    } else {
-                      return { success: false, message: 'Project at position ' + p.projectIndex + ' not found. There are ' + allPATProjects.length + ' projects available.' };
-                    }
-                  }
                 } else if (p.projectId) {
                   targetIds = [p.projectId];
+                } else if (p.projectIndex != null) {
+                  return { success: false, message: 'Delete by position/index is not allowed — it can delete the wrong project. Please delete by the exact projectId (e.g. "PAT-XXXX"). Use LIST_PAT_PROJECTS to get the ID.' };
                 } else {
-                  return { success: false, message: 'Provide projectId (e.g. "PAT-XXXX"), projectIndex (position number 1-based), or projectIds array.' };
+                  return { success: false, message: 'Provide projectId (e.g. "PAT-XXXX") or projectIds array. Delete by ID only.' };
                 }
 
                 let deletedCount = 0;
                 let lastError = '';
 
                 for (const pid of targetIds) {
+                  // MEC / Admin may only delete DRAFT PATs (Super Admin: any).
+                  // Resolve the project object to read its workflow status.
+                  let targetProject = null;
+                  for (const id of [pid, pid.replace('FOB-', 'PAT-'), pid.replace('PAT-', 'FOB-')]) {
+                    const hit = allPATProjects.find(pr => pr && (pr.projectId === id || (pr.projectId || '').replace('FOB-','PAT-') === id.replace('FOB-','PAT-')));
+                    if (hit) { targetProject = hit; break; }
+                  }
+                  const isAdminRole = isPrivilegedDeleter;
+                  const targetStatus = (targetProject && (targetProject.workflowStatus || targetProject.status || ''));
+                  if (isMECDeleter && !isAdminRole && targetStatus !== 'Draft') {
+                    lastError = 'Access Denied: MEC/Admin can only delete PATs in DRAFT status (this one is "' + (targetStatus || 'unknown') + '").';
+                    continue;
+                  }
+
                   const idVariations = [
                     pid,
                     pid.replace('FOB-', 'PAT-'),
@@ -8264,7 +9002,15 @@ case 'OPEN_PAT':
                 await new Promise(resolve => setTimeout(resolve, 500));
                 const dataForRandom = generateRandomPATData();
                 const success2 = aiFillPATForm(dataForRandom);
-                return { success: success2, message: success2 ? 'PAT form filled with random data. Review and save.' : 'Failed to fill form. Please try again with a specific project loaded.' };
+                if (!success2) return { success: false, message: 'Failed to fill form. Please try again with a specific project loaded.' };
+                // Actually SAVE as a Draft so the random data lands in the system
+                // as ONE project (previously it only filled the form, which left
+                // orphan drafts and made repeated runs look like "cloning").
+                await executeCommand({ type: 'SAVE_PAT' });
+                // Give the async save+refresh a moment, then read the new ID.
+                await new Promise(resolve => setTimeout(resolve, 800));
+                const newId = (currentEditingProject && currentEditingProject.projectId) || '';
+                return { success: true, projectId: newId, message: 'Created PAT draft with random data' + (newId ? ' (' + newId + ').' : '. Review and submit when ready.') };
               } catch (e) {
                 console.error('Random PAT fill error');
                 return { success: false, message: 'Failed to fill form with random data: ' + e.message };
@@ -8311,11 +9057,18 @@ case 'OPEN_PAT':
                   if (!fillSuccess) {
                     return { success: false, message: 'Failed to fill form with data.' };
                   }
+                  // Save the populated form as a Draft so the work is persisted as
+                  // ONE project (do not leave it unsaved — that caused repeated
+                  // "cloning" where the form reopened without a saved record).
+                  await executeCommand({ type: 'SAVE_PAT' });
+                  await new Promise(resolve => setTimeout(resolve, 800));
+                  const newId = (currentEditingProject && currentEditingProject.projectId) || '';
                   const projectName = randomData.projectName || 'Unnamed Project';
                   const score = randomData.snags ? randomData.snags.reduce((sum, s) => sum + (parseInt(s.weight) || 0), 0) : 0;
                   return {
                     success: true,
-                    message: 'COMPLETED: PAT form filled with intelligent data. All sections populated — site info, checklist, BOQ materials, and snag list. Project: ' + projectName + ' | Score: ' + score + '. Click Save Draft when ready.'
+                    projectId: newId,
+                    message: 'COMPLETED: PAT ' + (newId || 'draft') + ' created with intelligent data — site info, checklist, BOQ materials, and snag list. Project: ' + projectName + ' | Score: ' + score + '. Saved as Draft; click Submit when ready.'
                   };
                 } catch (e) {
                   console.error('Random fill and approve error');
@@ -9290,7 +10043,7 @@ case 'OPEN_PAT':
     </button>`;
       }
       boq += `</div>`;
-      boq += `<table id="boq-table" style="width:100%;border-collapse:collapse;font-size:12px"${roStyle}>
+      boq += `<table id="boq-table" style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed"${roStyle}>
     <thead><tr style="background:#f8fafc;font-size:10px;text-transform:uppercase;color:#8a90a0">
       <th style="padding:6px 8px;border:1px solid #e2e4e9;width:30px">#</th>
       <th style="padding:6px 8px;border:1px solid #e2e4e9">Description</th>
@@ -9505,6 +10258,9 @@ case 'OPEN_PAT':
     function buildBOQRow(rowNum, item, dropdownOpts, disabledAttr) {
       const cursorStyle = disabledAttr ? ' style="cursor:not-allowed;background-color:#f8f9fa"' : '';
       const selectedVal = item.desc || '';
+      // Hover tooltip shows the FULL material name (truncated long names stay
+      // fully readable on hover); kept in sync on selection change via onchange.
+      const descTitle = selectedVal ? ` title="${escapeHtml(selectedVal)}"` : '';
       // If the existing desc isn't in the dropdown, add it as a custom option
       let extraOpt = '';
       if (selectedVal && !PAT_BOQ_ITEMS.includes(selectedVal)) {
@@ -9513,13 +10269,23 @@ case 'OPEN_PAT':
       const removeBtn = disabledAttr ? '' : `<td style="border:1px solid #e2e4e9;text-align:center;padding:2px"><button type="button" onclick="removeBOQRow(this)" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;font-weight:700;padding:2px 4px" title="Remove row">&times;</button></td>`;
       // Custom-material add control (only when row is editable)
       const customCtrl = disabledAttr ? '' : `<button type="button" class="boq-add-custom-btn" onclick="toggleBOQCustom(this)" style="background:none;border:none;color:#1a3faa;cursor:pointer;font-size:14px;font-weight:700;padding:2px 4px" title="Add a new material not in the list">+</button>`;
+      // Build options from the live material list, marking the saved value as
+      // selected. Previously only custom (non-list) materials got a `selected`
+      // option, so a standard material reverted to "-- Select Material --" on
+      // edit. Now ANY saved material is correctly pre-selected.
+      const stdOpts = PAT_BOQ_ITEMS.map(item =>
+        `<option value="${escapeHtml(item)}"${item === selectedVal ? ' selected' : ''}>${escapeHtml(item)}</option>`
+      ).join('');
+      // Custom material not in the standard list: inject it as a selected option
+      const customOpt = (selectedVal && !PAT_BOQ_ITEMS.includes(selectedVal))
+        ? `<option value="${escapeHtml(selectedVal)}" selected>${escapeHtml(selectedVal)}</option>` : '';
       return `<tr style="${rowNum % 2 ? '' : 'background:#f9fafb'}">
     <td style="border:1px solid #e2e4e9;text-align:center;padding:4px;color:#9ca3af;font-size:11px">${rowNum}</td>
-    <td style="border:1px solid #e2e4e9;padding:3px 6px">
-      <div style="display:flex;align-items:center;gap:4px">
-        <select class="pm-boq-desc" style="flex:1;min-width:0;border:none;outline:none;font-size:12px;font-family:inherit;background:transparent;cursor:${disabledAttr ? 'not-allowed' : 'pointer'}"${cursorStyle} ${disabledAttr}>
+    <td style="border:1px solid #e2e4e9;padding:3px 6px;max-width:0;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:4px;min-width:0">
+        <select class="pm-boq-desc" style="flex:1;min-width:0;border:none;outline:none;font-size:12px;font-family:inherit;background:transparent;cursor:${disabledAttr ? 'not-allowed' : 'pointer'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis"${descTitle}${cursorStyle} ${disabledAttr} onchange="this.title=this.value">
           <option value="">-- Select Material --</option>
-          ${extraOpt}${dropdownOpts}
+          ${customOpt}${stdOpts}
         </select>
         ${customCtrl}
       </div>
@@ -9881,11 +10647,22 @@ case 'OPEN_PAT':
     }
 
     /**
-     * Remove an image from patFormImages by index and refresh UI
+     * Remove an image from patFormImages by index and refresh UI.
+     * Also syncs immediately to the backend: savePATImages() now RECONCILES,
+     * so the dropped URL is trashed from Drive right away and never comes back.
      */
     function removePatImage(index) {
       patFormImages.splice(index, 1);
       refreshPatImagesUI();
+      const projectId = currentEditingProject ? currentEditingProject.projectId : null;
+      if (projectId) {
+        gasCall('savePATImages', [projectId, patFormImages.slice()], function (imgRes) {
+          if (imgRes && imgRes.success && Array.isArray(imgRes.images)) {
+            patFormImages = imgRes.images.slice();
+            refreshPatImagesUI();
+          }
+        });
+      }
     }
 
     /**
@@ -10490,6 +11267,15 @@ case 'OPEN_PAT':
     window.removeProjectImage = function (projectId, imageIndex) {
       patFormImages.splice(imageIndex, 1);
       refreshPatImagesUI();
+      const pid = projectId || (currentEditingProject ? currentEditingProject.projectId : null);
+      if (pid) {
+        gasCall('savePATImages', [pid, patFormImages.slice()], function (imgRes) {
+          if (imgRes && imgRes.success && Array.isArray(imgRes.images)) {
+            patFormImages = imgRes.images.slice();
+            refreshPatImagesUI();
+          }
+        });
+      }
     };
 
     // Vendor Review UI Functions
@@ -11755,6 +12541,68 @@ case 'OPEN_PAT':
       showFrontendMessage('Site information reset to original values.', 'success');
     }
 
+    // ── SIMILAR PAT DETECTOR ──────────────────────────────────
+    // When creating a NEW PAT, scans existing projects for ones that look like
+    // the same site/job (matching project name or site address) and shows a
+    // non-blocking banner offering to open the similar PAT instead of duplicating.
+    function checkPATSimilarity() {
+      const banner = document.getElementById('pat-similarity-banner');
+      if (!banner) return;
+      // Only meaningful for NEW projects (editing an existing one IS the match)
+      if (currentEditingProject && currentEditingProject.projectId) {
+        banner.style.display = 'none';
+        banner.innerHTML = '';
+        return;
+      }
+      const name = (document.getElementById('pm-name').value || '').trim();
+      const addr = (document.getElementById('pm-address').value || '').trim();
+      if (name.length < 4 && addr.length < 4) {
+        banner.style.display = 'none';
+        banner.innerHTML = '';
+        return;
+      }
+      const nameN = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const addrN = addr.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const norm = s => s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+      const matches = (allPATProjects || []).filter(p => {
+        if (!p || !p.projectId) return false;
+        const pName = (p.projectName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const pAddr = (p.siteAddress || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        // Strong signal: one core string contains the other (handles suffixes like "Phase 2")
+        if ((nameN && pName && (nameN.includes(pName) || pName.includes(nameN))) ||
+            (addrN && pAddr && (addrN.includes(pAddr) || pAddr.includes(addrN)))) return true;
+        // Soft signal: >=2 shared meaningful tokens across name OR address
+        const tok = norm((p.projectName || '') + ' ' + (p.siteAddress || ''));
+        const qTok = norm(name + ' ' + addr);
+        let overlap = 0;
+        qTok.forEach(t => { if (t.length > 2 && tok.includes(t)) overlap++; });
+        return overlap >= 2;
+      }).slice(0, 3);
+
+      if (matches.length === 0) {
+        banner.style.display = 'none';
+        banner.innerHTML = '';
+        return;
+      }
+      const items = matches.map(p => {
+        const id = escapeHtml(p.projectId);
+        const nm = escapeHtml(p.projectName || 'Unnamed');
+        const ad = escapeHtml(p.siteAddress || '—');
+        const st = escapeHtml(p.workflowStatus || p.status || 'Draft');
+        const safeId = id.replace(/'/g, "\\'");
+        return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px dashed #fcd34d">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;color:#1a3faa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">[${id}] ${nm}</div>
+            <div style="font-size:11px;color:#92400e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ad} · <b>${st}</b></div>
+          </div>
+          <button type="button" onclick="openPATForm(false, allPATProjects.find(x => x.projectId === '${safeId}'))" style="background:#1a3faa;color:#fff;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">Open</button>
+        </div>`;
+      }).join('');
+      const plural = matches.length > 1 ? 's' : '';
+      banner.innerHTML = `<div style="display:flex;align-items:center;gap:6px;font-weight:700;margin-bottom:4px"><i class="ti ti-alert-triangle" style="font-size:14px"></i> Possible similar PAT${plural} already exist${plural} — open one instead of creating a duplicate?</div>${items}`;
+      banner.style.display = 'block';
+    }
+
     function closeAISidePanel() {
       document.getElementById("ai-side-panel").style.display = "none";
       const formBody = document.getElementById("pat-form-body");
@@ -11820,6 +12668,17 @@ case 'OPEN_PAT':
         if (!fb) { setTimeout(_wire, 500); return; }
         fb.addEventListener('input', markPATDirty);
         fb.addEventListener('change', markPATDirty);
+        // Similar-PAT detector: debounced check as the user types name/address
+        // (when creating a NEW project only).
+        const simFields = ['pm-name', 'pm-address'];
+        simFields.forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('input', function () {
+            if (_patSimTimer) clearTimeout(_patSimTimer);
+            _patSimTimer = setTimeout(checkPATSimilarity, 600);
+          });
+        });
       }
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _wire);
       else _wire();
@@ -11844,7 +12703,28 @@ case 'OPEN_PAT':
       const insts = [...document.querySelectorAll('.pm-boq-inst')].map(i => i.value);
       const vars = [...document.querySelectorAll('.pm-boq-var')].map(i => i.value);
       const rems = [...document.querySelectorAll('.pm-boq-rem')].map(i => i.value);
-      const boq = descs.map((d, i) => ({ desc: d, scope: scopes[i], installed: insts[i], variance: vars[i], remark: rems[i] })).filter(r => r.desc.trim());
+      // Recompute variance + remark from the actual quantities so a stale or
+      // empty remark can never be persisted, and so the reconciliation is
+      // always mathematically correct regardless of what the user typed.
+      function boqRemark(scopeVal, instVal) {
+        const s = parseFloat(scopeVal) || 0;
+        const n = parseFloat(instVal) || 0;
+        const v = s - n;
+        if (v > 0) return `material remain ${v}`;
+        if (v < 0) return `insufficient material ${Math.abs(v)} was added`;
+        return '—';
+      }
+      // Build every row, then drop ONLY truly empty rows (no desc AND no qty AND
+      // no remark). Previously this filtered on `desc.trim()` alone, which wiped
+      // any row whose material hadn't been picked from the dropdown — even when
+      // the user had entered quantities. That made saved reconciliations
+      // "disappear". Now user-entered data is always kept.
+      const boq = descs.map((d, i) => {
+        const s = scopes[i] || '';
+        const n = insts[i] || '';
+        const v = (parseFloat(s) || 0) - (parseFloat(n) || 0);
+        return { desc: d, scope: s, installed: n, variance: String(v), remark: boqRemark(s, n) };
+      }).filter(r => r.desc.trim() || (r.scope && r.scope !== '0') || (r.installed && r.installed !== '0') || (r.remark && r.remark !== '—'));
 
       const snagRefs = [...document.querySelectorAll('.pm-snag-ref')].map(i => i.value);
       const snagDescs = [...document.querySelectorAll('.pm-snag-desc')].map(i => i.value);
@@ -11917,8 +12797,50 @@ case 'OPEN_PAT':
         vendorApprovalStatus: currentEditingProject ? currentEditingProject.vendorApprovalStatus : 'pending',
         vendorApprovalComments: currentEditingProject ? currentEditingProject.vendorApprovalComments : '',
         vendorApprovalDate: currentEditingProject ? currentEditingProject.vendorApprovalDate : '',
-        vendorEverApproved: currentEditingProject ? currentEditingProject.vendorEverApproved : false
+        vendorEverApproved: currentEditingProject ? currentEditingProject.vendorEverApproved : false,
+        // ── Edit history diff (recorded on every save) ──
+        // editLog is appended to in savePATForm() after computing the delta.
+        editLog: (currentEditingProject && Array.isArray(currentEditingProject.editLog))
+          ? currentEditingProject.editLog.slice() : []
       };
+    }
+
+    // Builds a human-readable list of exactly which fields changed between the
+    // previously-saved project and the current form values. Used by the Edit
+    // History panel so each entry shows the precise change + who + when.
+    function buildEditLogEntry(prev, next) {
+      const FIELD_LABELS = {
+        projectName: 'Project Name',
+        siteAddress: 'Site Address',
+        lat: 'Latitude',
+        lon: 'Longitude',
+        vendor: 'Vendor',
+        workDescription: 'Work Description',
+        orchestrator: 'Reviewing Team',
+        presidingOfficer: 'Presiding Officer',
+        inspectionDate: 'Inspection Date'
+      };
+      const changed = [];
+      Object.keys(FIELD_LABELS).forEach(function(k) {
+        const a = (prev && prev[k] != null) ? String(prev[k]) : '';
+        const b = (next && next[k] != null) ? String(next[k]) : '';
+        if (a !== b) {
+          changed.push(FIELD_LABELS[k] + ': ' + (a || '(empty)') + ' → ' + (b || '(empty)'));
+        }
+      });
+      // Count checklist / snag changes too
+      if (prev && next) {
+        const prevChk = prev.checklist ? JSON.stringify(prev.checklist) : '';
+        const nextChk = next.checklist ? JSON.stringify(next.checklist) : '';
+        if (prevChk !== nextChk) changed.push('Checklist items');
+        const prevSnag = Array.isArray(prev.snags) ? prev.snags.length : 0;
+        const nextSnag = Array.isArray(next.snags) ? next.snags.length : 0;
+        if (prevSnag !== nextSnag) changed.push('Snag list (' + prevSnag + ' → ' + nextSnag + ')');
+        const prevImgs = Array.isArray(prev.images) ? prev.images.length : 0;
+        const nextImgs = Array.isArray(next.images) ? next.images.length : 0;
+        if (prevImgs !== nextImgs) changed.push('Site images (' + prevImgs + ' → ' + nextImgs + ')');
+      }
+      return changed;
     }
 
     function savePATForm(action = 'close', e) {
@@ -11931,6 +12853,28 @@ case 'OPEN_PAT':
       if (!data.projectName) { alert("Project Name is required."); return; }
       if (!data.siteAddress) { alert("Site Address is required."); return; }
       if (!data.orchestrator) { alert("Reviewing Team is required."); return; }
+
+      // ── Build Edit History entry (records exactly what changed + who + when) ──
+      // Compute the delta between the loaded project and the current form data,
+      // then append a structured entry that the Edit History panel renders.
+      (function appendEditLog() {
+        const prev = currentEditingProject || {};
+        const changed = buildEditLogEntry(prev, data);
+        if (!Array.isArray(data.editLog)) data.editLog = [];
+        if (changed.length > 0) {
+          data.editLog.push({
+            at: new Date().toISOString(),
+            by: _session.name || _session.email || 'Unknown',
+            email: _session.email || '',
+            dept: _session.department || '',
+            role: _session.role || '',
+            action: (prev && prev.projectId) ? 'edited' : 'created',
+            changed: changed,
+            statusBefore: prev.workflowStatus || '',
+            statusAfter: data.workflowStatus || ''
+          });
+        }
+      })();
 
       // Presiding Officer is intentionally NOT auto-generated. It must be set
       // explicitly by MEC / Super Admin via the PAT detail modal's officer picker.
@@ -13012,7 +13956,11 @@ case 'OPEN_PAT':
 
     function loadPATProjects(forceRefresh, callback) {
       if (typeof forceRefresh !== 'boolean') forceRefresh = false;
-      showLoading('Loading PAT projects...');
+      // Only show the loading bar for user-initiated loads. The silent
+      // auto-refresh (every 30s) and background "stay" refreshes must NOT
+      // flash the bar — otherwise it looks like the app is "always loading"
+      // even when the user did nothing.
+      if (forceRefresh) showLoading('Loading PAT projects...');
       gasCall('getPATProjects', [], res => {
         hideLoading();
         if (res.success) {
@@ -13764,7 +14712,16 @@ case 'OPEN_PAT':
         const when = e.at ? new Date(e.at).toLocaleString('en-GB') : '—';
         const who = _esc(e.by || 'Unknown') + (e.dept ? ' · ' + _esc(e.dept) : '') + (e.role ? ' (' + _esc(e.role) + ')' : '');
         const changes = (e.changed && e.changed.length)
-          ? e.changed.map(function (c) { return '<span style="background:#eef2ff;color:#1a3faa;padding:1px 6px;border-radius:4px;font-size:11px;margin:2px 2px 0 0;display:inline-block">' + _esc(c) + '</span>'; }).join('')
+          ? '<ul style="margin:6px 0 0;padding-left:16px;list-style:disc;max-width:100%">' +
+            e.changed.map(function (c) {
+              const parts = String(c).split(' → ');
+              if (parts.length === 2) {
+                return '<li style="font-size:12px;color:#334155;margin:2px 0;line-height:1.4">' +
+                  '<b style="color:#0d1526">' + _esc(parts[0].replace(/:$/, '')) + ':</b> ' +
+                  '<span style="color:#64748b">' + _esc(parts[1]) + '</span></li>';
+              }
+              return '<li style="font-size:12px;color:#334155;margin:2px 0;line-height:1.4">' + _esc(c) + '</li>';
+            }).join('') + '</ul>'
           : '<span style="color:#64748b;font-size:11px">no field changes</span>';
         const status = (e.statusBefore && e.statusAfter && e.statusBefore !== e.statusAfter)
           ? '<div style="font-size:11px;color:#475569;margin-top:4px">Status: <b>' + _esc(e.statusBefore) + '</b> &rarr; <b>' + _esc(e.statusAfter) + '</b></div>'
@@ -13938,9 +14895,14 @@ case 'OPEN_PAT':
             ${_hasVendor ? (function() {
               var vEver = _vEverApproved;
               var vs = _q.vendorApprovalStatus;
-              var effectiveStatus = vEver ? 'approved' : vs;
+              // Latest status wins: if the vendor's most recent review was a
+              // rejection, show REJECTED — do NOT let the permanent "ever approved"
+              // flag mask a later rejection (that caused the Approved/Rejected
+              // contradiction on e.g. FOB-2B2048).
+              var effectiveStatus = (vs === 'rejected') ? 'rejected' : (vEver ? 'approved' : vs);
               var vColor = effectiveStatus === 'approved' ? '#166534' : effectiveStatus === 'rejected' ? '#dc2626' : '#f59e0b';
-              return '<div style="color:#8a90a0">Vendor Approval:</div><div style="color:' + vColor + ';font-weight:600"><i class="ti ti-circle-check"></i> Approved</div>';
+              var vLabel = effectiveStatus === 'approved' ? 'Approved' : effectiveStatus === 'rejected' ? 'Rejected' : 'Pending';
+              return '<div style="color:#8a90a0">Vendor Approval:</div><div style="color:' + vColor + ';font-weight:600"><i class="ti ti-circle-' + (effectiveStatus === 'rejected' ? 'x' : 'check') + '"></i> ' + vLabel + '</div>';
             })() : ''}
           </div>
           ${_hasVendor && !_vEverApproved && _q.vendorApprovalStatus === 'pending' ? `
@@ -13948,7 +14910,8 @@ case 'OPEN_PAT':
             <strong>Waiting for vendor.</strong> Workflow actions are blocked until the vendor approves.
           </div>
           ` : ''}
-          ${_hasVendor && !_vEverApproved && _q.vendorApprovalStatus === 'rejected' && project.workflowStatus !== 'Awaiting MEC Recheck' ? `
+          ${_hasVendor && !_vEverApproved && _q.vendorApprovalStatus === 'rejected'
+            && (project.workflowStatus === 'Awaiting Project Team' || project.workflowStatus === 'Awaiting Service Delivery (Metro)') ? `
           <div style="margin-top:12px;padding:10px 14px;background:#fee2e2;border-left:4px solid #dc2626;border-radius:6px;font-size:12px;color:#991b1b">
             <strong>Vendor rejected this project.</strong> Generate a new vendor link to re-request approval, or reject to send it to MEC for recheck.
           </div>
@@ -14058,11 +15021,22 @@ case 'OPEN_PAT':
       <button class="btn-primary" style="padding:10px 24px;background:#166534" onclick="viewPATProjectPDF('${project.projectId}')">
         <i class="ti ti-file-type-pdf"></i> View PDF
       </button>
-      ${_session.role === 'super admin' ? `
-        <button class="btn-primary" style="padding:10px 24px;background:#e5342a" onclick="confirmDeleteProject('${project.projectId}')">
-          <i class="ti ti-trash"></i> Delete
-        </button>
-      ` : ''}
+      ${(() => {
+        // Delete access (STRICT):
+        //  - ONLY the MEC department may delete a PAT.
+        //  - MEC may delete ONLY while the PAT is still in DRAFT.
+        //  - No other department (incl. Admin / Super Admin) ever sees the Delete button.
+        //  - Once the PAT leaves Draft, the Delete button is hidden for everyone.
+        const _dept = (_session.department || '').toLowerCase();
+        const _isMEC = (_dept === 'mec' || _dept === 'mech');
+        const _isDraft = (project.workflowStatus || project.status || '') === 'Draft';
+        const _canDelete = _isMEC && _isDraft;
+        return _canDelete ? `
+      <button class="btn-primary" style="padding:10px 24px;background:#dc2626" onclick="confirmDeleteProject('${project.projectId}')" title="Delete draft PAT (MEC only)">
+        <i class="ti ti-trash"></i> Delete PAT
+      </button>
+      ` : '';
+      })()}
       ${(() => {
         const vStat = (project.vendorApprovalStatus || 'pending').toLowerCase();
         const vEverApproved = project.vendorEverApproved === true;
@@ -14282,7 +15256,7 @@ case 'OPEN_PAT':
         const item = boqData[i] || {};
         boqRows += `<tr>
           <td style="border:1px solid #000;text-align:center;">${i + 1}</td>
-          <td style="border:1px solid #000;">${item.desc}</td>
+          <td style="border:1px solid #000;max-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;" title="${escapeHtml(item.desc || '')}">${escapeHtml(item.desc || '')}</td>
           <td style="border:1px solid #000;text-align:center;">${item.scope || ''}</td>
            <td style="border:1px solid #000;text-align:center;">${item.installed || ''}</td>
            <td style="border:1px solid #000;text-align:center;">${(parseFloat(item.scope) || 0) - (parseFloat(item.installed) || 0)}</td>
@@ -14444,7 +15418,7 @@ td,th{border:1px solid #000;padding:4px 6px;vertical-align:top}
   <thead><tr><th style="width:32px">Sev</th><th>Work Item / Check</th><th style="width:28px">OK</th><th style="width:28px">NOK</th><th style="width:28px">NA</th><th>Comments</th><th>Remark</th></tr></thead>
   <tbody>${chkRows}</tbody>
 </table>
-<table class="boq-table" style="margin-bottom:8px">
+<table class="boq-table" style="margin-bottom:8px;table-layout:fixed;width:100%">
   <thead><tr><th style="width:25px">S/N</th><th>Description</th><th style="width:80px">Scope</th><th style="width:80px">Installed</th><th style="width:60px">Var</th><th style="width:80px">Remark</th></tr></thead>
   <tbody>${boqRows}</tbody>
 </table>
