@@ -1,8 +1,5 @@
 {
-  "allowedPaths": [
-    "/path/to/public/directory1",
-    "/path/to/public/directory2"
-  ],
+  "allowedPaths": ["/path/to/public/directory1", "/path/to/public/directory2"],
   "commandSecurity": {
     "enabled": true,
     "allowedCommands": [
@@ -47,10 +44,10 @@
       "su"
     ],
     "blockedPatterns": [
-      ">(.*)",          
-      ">>(.*)",         
-      "\\$(.*)",         
-      "`(.*)`",         
+      ">(.*)",
+      ">>(.*)",
+      "\\$(.*)",
+      "`(.*)`",
       "\\|\\s*(curl|wget|nc|netcat|ssh|python)",
       "\\.(sh|bash|py|pl|rb|php)\\b",
       "\\bchmod\\s+[0-7]*[0-7][0-7][7]\\b"
